@@ -1,0 +1,3909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary SEO -->
+  <title>PathAnnotate – Pathology Specimen Annotation Tool</title>
+  <meta name="description" content="PathAnnotate is a lightweight, client-side web app for annotating gross pathology specimens. Draw rectangles, lines, and block labels, save and export annotated images.">
+  <meta name="keywords" content="pathology, annotation tool, pathology assistant, gross specimen, block labeling, client-side web app, medical software">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://pathannotate.app">
+
+  <!-- PWA / Mobile -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00e5c3">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PathAnnotate">
+  <link rel="apple-touch-icon" href="icons/og-image.png">
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+
+  <!-- Open Graph (Facebook, LinkedIn, etc.) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="PathAnnotate – Lightweight Pathology Annotation Tool">
+  <meta property="og:description" content="Annotate gross pathology images directly in your browser. Save sessions, export images, and keep all data on your device.">
+  <meta property="og:url" content="https://pathannotate.app">
+  <meta property="og:site_name" content="PathAnnotate">
+  <meta property="og:image" content="https://pathannotate.app/icons/og-image.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PathAnnotate – Lightweight Pathology Annotation Tool">
+  <meta name="twitter:description" content="Annotate gross pathology images directly in your browser. Save sessions, export images, and keep all data on your device.">
+  <meta name="twitter:image" content="https://pathannotate.app/icons/og-image.png">
+  <meta name="twitter:site" content="@PathAnnotate">
+
+  <!-- Structured Data / JSON-LD for software -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "PathAnnotate",
+    "url": "https://pathannotate.app",
+    "applicationCategory": "MedicalApplication",
+    "operatingSystem": "Web",
+    "softwareVersion": "1.2.0",
+    "description": "PathAnnotate is a lightweight web app for annotating gross pathology specimens. Draw rectangles, lines, and block labels, save sessions, and export annotated images.",
+    "offers": {
+      "@type": "Offer",
+      "url": "https://pathannotate.app",
+      "price": "0",
+      "priceCurrency": "CAD"
+    },
+    "creator": {
+      "@type": "Organization",
+      "name": "PathAnnotate",
+      "url": "https://github.com/PathAnnotate/PathAnnotate"
+    }
+  }
+  </script>
+
+</head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg: #0f0f10;
+      --surface: #1a1a1c;
+      --border: #2a2a2e;
+      --accent: #00e5c3;
+      --accent-dim: rgba(0, 229, 195, 0.12);
+      --text: #e8e8ea;
+      --muted: #5a5a62;
+      --danger: #e03535;
+      --inp: #0f0f10;
+      --grid: rgba(255, 255, 255, 0.025);
+      --cvbg: #080809;
+    }
+
+    body.light {
+      --bg: #f0f0f1;
+      --surface: #ffffff;
+      --border: #d8d8dc;
+      --accent: #009e88;
+      --accent-dim: rgba(0, 158, 136, 0.10);
+      --text: #18181b;
+      --muted: #7a7a84;
+      --danger: #c92020;
+      --inp: #f0f0f1;
+      --grid: rgba(0, 0, 0, 0.045);
+      --cvbg: #dcdcdf;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: background .2s, color .2s
+    }
+
+    /* HEADER */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      height: 44px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface)
+    }
+
+    .logo {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      letter-spacing: .15em;
+      color: var(--accent);
+      text-transform: uppercase
+    }
+
+    .logo span {
+      color: var(--muted)
+    }
+
+    .logo-ver {
+      font-size: 8px;
+      color: var(--muted);
+      letter-spacing: .05em;
+      margin-left: 5px;
+      text-transform: none;
+      vertical-align: middle;
+      opacity: .7
+    }
+
+    .hdr-r {
+      display: flex;
+      align-items: center;
+      gap: 7px
+    }
+
+    .hdr-info {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 3px 9px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      transition: all .15s
+    }
+
+    .pill:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    .pill:disabled {
+      opacity: .28;
+      cursor: default;
+      pointer-events: none
+    }
+
+    .pill-danger {
+      color: var(--danger);
+      border-color: rgba(224,53,53,.3)
+    }
+
+    .pill-danger:hover {
+      border-color: var(--danger);
+      color: var(--danger)
+    }
+
+    .hdr-sep {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+      margin: 0 2px;
+      flex-shrink: 0
+    }
+
+    /* LAYOUT */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 222px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 10px 8px;
+      gap: 4px;
+      flex-shrink: 0;
+      background: var(--surface);
+      overflow-y: auto
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 3px
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px
+    }
+
+    .slabel {
+      font-family: 'DM Mono', monospace;
+      font-size: 8.5px;
+      letter-spacing: .2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 0 2px;
+      margin-top: 7px;
+      margin-bottom: 1px
+    }
+
+    .slabel:first-child {
+      margin-top: 0
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .15s;
+      width: 100%;
+      text-align: left
+    }
+
+    .btn:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    .btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    .btn svg {
+      flex-shrink: 0
+    }
+
+    .btn-danger {
+      border-color: rgba(224, 53, 53, .3);
+      color: var(--danger)
+    }
+
+    .btn-danger:hover {
+      background: rgba(200, 30, 30, .08);
+      border-color: var(--danger);
+      color: var(--danger)
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 500;
+      justify-content: center
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.1)
+    }
+
+    .btn-flat {
+      background: var(--bg);
+      border-color: var(--border);
+      justify-content: center;
+      font-size: 11px
+    }
+
+    .undo-redo-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 2px
+    }
+
+    .btn-half {
+      flex: 1;
+      width: auto;
+      justify-content: center;
+      font-size: 11px
+    }
+
+    .kbdtag {
+      margin-left: auto;
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 4px
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 2px 0
+    }
+
+    /* COLOR SWATCHES */
+    .color-row {
+      display: flex;
+      gap: 5px;
+      padding: 2px 2px;
+      flex-wrap: wrap
+    }
+
+    .swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform .1s, border-color .1s;
+      position: relative
+    }
+
+    .swatch:hover {
+      transform: scale(1.18)
+    }
+
+    .swatch.active::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 6px;
+      border: 2px solid var(--accent)
+    }
+
+    .swatch[data-border] {
+      border-color: var(--border)
+    }
+
+    /* SLIDERS */
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 2px 2px
+    }
+
+    .slider-lbl {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer
+    }
+
+    /* BLOCK LABEL */
+    .blk-row {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 2px
+    }
+
+    .blk-input {
+      flex: 1;
+      min-width: 0;
+      background: var(--inp);
+      border: 1px solid var(--border);
+      text-align: center;
+      color: var(--text);
+      border-radius: 5px;
+      padding: 4px 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      transition: border-color .15s
+    }
+
+    .blk-input:focus {
+      border-color: var(--accent)
+    }
+
+    .spin {
+      width: 24px;
+      height: 27px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all .15s;
+      padding: 0;
+      font-family: 'DM Mono', monospace;
+      line-height: 1
+    }
+
+    .spin:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    /* LABEL KEY */
+    .key-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px
+    }
+
+    .key-row .slabel {
+  flex: 1;
+}
+
+    .key-copy-btn, .clear-all-ann {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all .15s
+    }
+
+    .key-copy-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    /* CHECKBOXES */
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 2px;
+      cursor: pointer
+    }
+
+    .check-row input[type=checkbox] {
+      accent-color: var(--accent);
+      width: 13px;
+      height: 13px;
+      cursor: pointer
+    }
+
+    .check-row span {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace
+    }
+
+    /* ANCHOR / FREEFORM TOGGLE */
+    .anchor-toggle-row {
+      display: flex;
+      gap: 4px;
+      padding: 1px 2px
+    }
+
+    .anchor-toggle {
+      flex: 1;
+      padding: 5px 4px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'DM Mono', monospace;
+      transition: all .15s;
+      text-align: center
+    }
+
+    .anchor-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    .anchor-toggle.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    /* LINE STYLE TOGGLE */
+    .line-style-row {
+      display: flex;
+      gap: 4px;
+      padding: 1px 2px
+    }
+
+    .lstyle-btn {
+      flex: 1;
+      padding: 5px 4px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'DM Mono', monospace;
+      transition: all .15s;
+      text-align: center
+    }
+
+    .lstyle-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    .lstyle-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    /* DISABLED / GREYED STATES */
+    .btn:disabled {
+      opacity: .3;
+      cursor: default;
+      pointer-events: none
+    }
+
+    /* Toolbar section greyed out when not applicable to current tool */
+    .sidebar-section.greyed {
+      opacity: .3;
+      pointer-events: none
+    }
+
+    /* Inline attach-to-rect checkbox inside blk-row */
+    .check-attach {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      margin-left: 2px;
+      flex-shrink: 0
+    }
+
+    .check-attach input[type=checkbox] {
+      accent-color: var(--accent);
+      width: 11px;
+      height: 11px;
+      cursor: pointer
+    }
+
+    .check-attach span {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap
+    }
+
+    /* COMBINED BOTTOM BAR (replaces zoom-bar + statusbar) */
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      height: 26px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0
+    }
+
+    .bottom-bar input[type=range] {
+      width: 90px;
+      height: 3px
+    }
+
+    .bar-sep {
+      width: 1px;
+      height: 14px;
+      background: var(--border);
+      flex-shrink: 0
+    }
+
+    /* CANVAS */
+    .canvas-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      position: relative;
+      background: var(--cvbg);
+      background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+      transition: background .2s
+    }
+
+    .drop-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      text-align: center;
+      padding: 40px
+    }
+
+    .drop-zone svg {
+      opacity: .22;
+      color: var(--muted)
+    }
+
+    .drop-zone h2 {
+      font-size: 17px;
+      font-weight: 300;
+      color: var(--text);
+      opacity: .45
+    }
+
+    .drop-zone p {
+      font-size: 12px;
+      font-family: 'DM Mono', monospace;
+      color: var(--muted)
+    }
+
+    .upload-btn-large {
+      padding: 8px 20px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all .15s;
+      margin-top: 5px
+    }
+
+    .upload-btn-large:hover {
+      filter: brightness(1.1)
+    }
+
+    #canvas-wrapper {
+      display: none
+    }
+
+    #main-canvas {
+      display: block
+    }
+
+    /* STATUS BAR */
+    .statusbar {
+      height: 23px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 11px;
+      gap: 16px;
+      flex-shrink: 0;
+      background: var(--surface)
+    }
+
+    .stat {
+      font-family: 'DM Mono', monospace;
+      font-size: 9.5px;
+      color: var(--muted)
+    }
+
+    .stat span {
+      color: var(--text)
+    }
+
+    /* ANNOTATION LIST */
+    .annot-list {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-height: 100px
+    }
+
+    .annot-list::-webkit-scrollbar {
+      width: 3px
+    }
+
+    .annot-list::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 2px
+    }
+
+    .ann-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 5px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'DM Mono', monospace;
+      color: var(--muted);
+      transition: all .1s;
+      user-select: none
+    }
+
+    .ann-item:hover {
+      background: var(--accent-dim);
+      color: var(--text)
+    }
+
+    .ann-item.sel {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      color: var(--text)
+    }
+
+    .ann-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      flex-shrink: 0;
+      border: 1px solid var(--border)
+    }
+
+    .ann-item-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 1px;
+      opacity: 0;
+      transition: opacity .1s
+    }
+
+    .ann-item:hover .ann-item-actions {
+      opacity: 1
+    }
+
+    .ann-del, .ann-dup {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 2px;
+      display: flex;
+      border-radius: 3px;
+      transition: color .1s
+    }
+
+    .ann-del:hover { color: var(--danger) }
+    .clear-all-ann:hover { 
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+    .ann-dup:hover { color: var(--accent) }
+
+    /* BLOCK KEY LIST */
+    .key-list {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-height: 160px;
+      margin-top: 3px
+    }
+
+    .key-list::-webkit-scrollbar { width: 3px }
+    .key-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px }
+
+    .key-entry {
+      display: flex;
+      align-items: center;
+      gap: 4px
+    }
+
+    .key-entry-lbl {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--text);
+      min-width: 44px;
+      flex-shrink: 0
+    }
+
+    .key-entry-notes {
+      flex: 1;
+      min-width: 0;
+      background: var(--inp);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      outline: none;
+      transition: border-color .15s
+    }
+
+    .key-entry-notes:focus { border-color: var(--accent) }
+    .key-entry-notes::placeholder { color: var(--muted) }
+
+    .key-warn {
+      font-size: 9px;
+      color: #e08020;
+      flex-shrink: 0;
+      cursor: default;
+      line-height: 1;
+    }
+
+    /* ZOOM BAR */
+    .zoom-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      height: 28px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0
+    }
+
+    .zoom-bar input[type=range] {
+      width: 120px;
+      height: 3px
+    }
+
+    .zoom-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      width: 20px;
+      height: 18px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      transition: all .15s;
+      flex-shrink: 0;
+      padding: 0
+    }
+
+    .zoom-btn:hover { border-color: var(--accent); color: var(--accent) }
+
+    .zoom-pct {
+      font-family: 'DM Mono', monospace;
+      font-size: 9.5px;
+      color: var(--muted);
+      min-width: 34px
+    }
+
+    .zoom-fit-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      padding: 1px 4px;
+      cursor: pointer;
+      font-size: 9.5px;
+      font-family: 'DM Mono', monospace;
+      transition: all .15s
+    }
+
+    .zoom-fit-btn:hover { border-color: var(--accent); color: var(--accent) }
+
+    /* INLINE EDIT POPUP */
+    .edit-popup {
+      position: fixed;
+      z-index: 300;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 7px;
+      padding: 6px 7px;
+      display: none;
+      gap: 5px;
+      align-items: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .5)
+    }
+
+    .edit-popup.open {
+      display: flex
+    }
+
+    .edit-popup input {
+      background: var(--inp);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      padding: 4px 7px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      width: 110px
+    }
+
+    .edit-popup input:focus {
+      border-color: var(--accent)
+    }
+
+    .edit-popup button {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      border-radius: 4px;
+      padding: 4px 9px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500
+    }
+
+    /* LEGEND MODAL */
+    .modal-bg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .65);
+      z-index: 200;
+      align-items: center;
+      justify-content: center
+    }
+
+    .modal-bg.open {
+      display: flex
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      width: 480px;
+      max-width: 95vw
+    }
+
+    .modal h3 {
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 12px;
+      color: var(--text)
+    }
+
+    /* Legend preset chips */
+    .preset-section {
+      margin-bottom: 12px
+    }
+
+    .preset-label {
+      font-size: 9px;
+      font-family: 'DM Mono', monospace;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .15em;
+      margin-bottom: 6px
+    }
+
+    .preset-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px
+    }
+
+    .preset-chip {
+      padding: 4px 10px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all .15s;
+      line-height: 1.4;
+      text-align: center
+    }
+
+    .preset-chip:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim)
+    }
+
+    .preset-chip.applied {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim)
+    }
+
+    .preset-chip .chip-main {
+      font-weight: 500;
+      font-size: 11px
+    }
+
+    .preset-chip .chip-sub {
+      font-size: 9px;
+      opacity: .6
+    }
+
+    .mf {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-bottom: 8px
+    }
+
+    .mf label {
+      font-size: 9px;
+      font-family: 'DM Mono', monospace;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .1em
+    }
+
+    .mf input,
+    .mf select {
+      background: var(--inp);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      outline: none
+    }
+
+    .mf input:focus,
+    .mf select:focus {
+      border-color: var(--accent)
+    }
+
+    .mrow {
+      display: flex;
+      gap: 8px
+    }
+
+    .mrow .mf {
+      flex: 1
+    }
+
+    .modal-acts {
+      display: flex;
+      gap: 7px;
+      margin-top: 12px
+    }
+
+    .modal-acts button {
+      flex: 1;
+      padding: 7px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px
+    }
+
+    .m-cancel {
+      background: transparent;
+      color: var(--text)
+    }
+
+    .m-cancel:hover {
+      background: var(--bg)
+    }
+
+    .m-ok {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 500
+    }
+
+    .m-ok:hover {
+      filter: brightness(1.1)
+    }
+
+    .privacy-link {
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 9.5px;
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      transition: color .15s
+    }
+
+    .privacy-link:hover { color: var(--accent) }
+
+    .leg-preview {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text);
+      margin-bottom: 9px;
+      text-align: center;
+      line-height: 2.1;
+      background: var(--bg)
+    }
+
+    .leg-preview .ctr {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 4px;
+      text-align: center
+    }
+
+    .leg-preview .ctr .leg-left {
+      text-align: left
+    }
+
+    .leg-preview .ctr .leg-right {
+      text-align: right
+    }
+
+    #file-input,
+    #json-input {
+      display: none
+    }
+  </style>
+</head>
+
+<body>
+  
+  <noscript>
+    <div>
+      <h1>PathAnnotate: Pathology Specimen Annotation Tool</h1>
+      <h2>Features</h2>
+      <p>Import gross pathology photos, draw rectangles and block labels, save sessions, export annotated images, light/dark themes, undo/redo, all data stays on your device.</p>
+      <h2>Usage</h2>
+      <p>Set titles, annotate specimens, copy block keys, export images.</p>
+      <h2>Privacy</h2>
+      <p>This application runs entirely client-side; no analytics or external data transmission.</p>
+    </div>
+  </noscript>
+
+  <header>
+    <div class="logo">Path<span>Annotate</span><span class="logo-ver" id="logo-ver"></span></div>
+    <div class="hdr-r">
+      <button class="pill" onclick="document.getElementById('file-input').click()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        Import Photo
+      </button>
+      <button class="pill" onclick="exportImg()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+        Export Photo
+      </button>
+      <div class="hdr-sep"></div>
+      <button class="pill" onclick="saveSession()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+          <polyline points="17 21 17 13 7 13 7 21" />
+          <polyline points="7 3 7 8 15 8" />
+        </svg>
+        Save
+      </button>
+      <button class="pill" onclick="document.getElementById('json-input').click()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5" />
+        </svg>
+        Load
+      </button>
+      <div class="hdr-sep"></div>
+
+      <button class="pill pill-danger" onclick="resetAll()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
+        </svg>
+        Reset
+      </button>
+      <div class="hdr-info" id="file-name">no image loaded</div>
+      <button class="pill" onclick="toggleTheme()" id="theme-btn">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>Light
+      </button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="sidebar">
+      <!-- ── UNDO / REDO ─────────────────────────────── -->
+      <div class="undo-redo-row">
+        <button class="btn btn-flat btn-half" id="undo-btn" onclick="doUndo()" disabled>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="9 14 4 9 9 4" />
+            <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+          </svg>
+          Undo
+        </button>
+        <button class="btn btn-flat btn-half" id="redo-btn" onclick="doRedo()" disabled>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="15 14 20 9 15 4" />
+            <path d="M4 20v-7a4 4 0 0 1 4-4h12" />
+          </svg>
+          Redo
+        </button>
+      </div>
+
+      <!-- ── CANVAS FURNITURE ────────────────────────── -->
+      <div class="slabel" title="Case number and specimen name shown on the canvas and used as export filename">Specimen Title</div>
+      <button class="btn" onclick="openTitle()" title="Set case number and specimen name">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 7 4 4 20 4 20 7"/>
+          <line x1="9" y1="20" x2="15" y2="20"/>
+          <line x1="12" y1="4" x2="12" y2="20"/>
+        </svg>
+        Set Title…
+      </button>
+
+      <div class="slabel" title="Add a cardinal direction overlay (Superior/Inferior/Anterior/Posterior etc.)">Orientation Legend</div>
+      <button class="btn" onclick="openLegend()" title="Insert an orientation legend onto the canvas">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        Insert Legend…
+      </button>
+
+      <!-- ── DRAWING TOOLS ───────────────────────────── -->
+      <div class="slabel">Tool</div>
+      <button class="btn" id="tool-select" onclick="setTool('select')" title="Select, move, resize and rotate objects (S)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 3l14 9-7 1-4 7z" />
+        </svg>
+        Select / Move<span class="kbdtag">S</span>
+      </button>
+
+      <button class="btn active" id="tool-rect" onclick="setTool('rect')"
+        title="Draw annotation rectangles representing tissue sections (R)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+        </svg>
+        Rectangle<span class="kbdtag">R</span>
+      </button>
+      <button class="btn" id="tool-block" onclick="setTool('block')"
+        title="Place a block label using the current block counter value (B)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 7 4 4 20 4 20 7" />
+          <line x1="9" y1="20" x2="15" y2="20" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+        </svg>
+        Block<span class="kbdtag">B</span>
+      </button>
+      
+      <button class="btn" id="tool-line" onclick="setTool('line')"
+        title="Draw lines and arrows for orientation or margin markings (E)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="19" x2="19" y2="5" />
+        </svg>
+        Line<span class="kbdtag">E</span>
+      </button>
+
+      <button class="btn" id="tool-text" onclick="setTool('text')"
+        title="Add freeform text annotations (not tracked as blocks) (T)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="6" x2="20" y2="6"/>
+          <line x1="4" y1="12" x2="14" y2="12"/>
+          <line x1="4" y1="18" x2="11" y2="18"/>
+        </svg>
+        Text<span class="kbdtag">T</span>
+      </button>
+
+
+      <div class="slabel" title="Stroke and fill colour for new objects">Stroke Color</div>
+      <div class="color-row" id="color-row"></div>
+      <!-- ── BLOCK LABEL ─────────────────────────────── -->
+      <div class="sidebar-section" id="section-blocklabel">
+        <div class="slabel"
+          title="Block label counter — used when placing Block Label objects or auto-attaching to rectangles">Block Text
+        </div>
+        <div class="blk-row">
+          <button class="spin" onclick="spinMinus()" title="Shrink label / decrement counter">−</button>
+          <input type="text" class="blk-input" id="block-label" value="1" placeholder="1-2, A" maxlength="10"
+            title="Current block label value — supports single (A) or range (1-3) formats">
+          <button class="spin" onclick="spinPlus()" title="Extend range / increment counter">+</button>
+
+        </div>
+
+      
+      
+      <div class="sidebar-section" id="section-labelpos" title="Controls where block labels are positioned relative to their rectangle">
+
+        <div class="anchor-toggle-row">
+          <button class="anchor-toggle active" id="anchor-btn" onclick="setAnchorMode('anchor')"
+            title="Snap label to one of 9 fixed anchor points around the rectangle">⊞ Anchor</button>
+          <button class="anchor-toggle" id="freeform-btn" onclick="setAnchorMode('freeform')"
+            title="Drag label freely; position is stored relative to rectangle centre">↗ Freeform</button>
+        </div>
+      </div>
+      <div class="check-row">
+      <label class="check-attach" title="Automatically attach a block label to each new rectangle">
+        <input type="checkbox" id="show-label" checked onchange="saveSettings();updateToolbarState()">
+        <span>Include with new rectangles</span>
+      </label>
+    </div>
+
+  </div>
+      
+      
+      <!-- ── STYLE CONTROLS ──────────────────────────── -->
+      <div class="sidebar-section" id="section-linestyle">
+        <div class="slabel" title="Stroke dash pattern for rectangles and lines">Line Style</div>
+        <div class="line-style-row">
+          <button class="lstyle-btn active" id="lstyle-solid" onclick="setLineStyle('solid')" title="Solid line">—</button>
+          <button class="lstyle-btn" id="lstyle-dashed" onclick="setLineStyle('dashed')" title="Dashed line"> - - </button>
+          <button class="lstyle-btn" id="lstyle-dotted" onclick="setLineStyle('dotted')" title="Dotted line"> ··· </button>
+        </div>
+      
+      
+      
+      
+      <div class="slabel" title="Width of the stroke in pixels">Stroke Width</div>
+      <div class="slider-row">
+        <div class="slider-lbl"><span>1px</span><span id="sw-val">2px</span><span>12px</span></div>
+        <input type="range" id="stroke-w" min="1" max="12" value="2" title="Drag to change stroke width">
+      </div>
+
+    </div>
+      
+      <div class="sidebar-section" id="section-textsize">
+        <div class="slabel" title="Font size for block labels and text annotations">Text Size</div>
+        <div class="slider-row">
+          <div class="slider-lbl"><span>Sm</span><span id="fs-val">13px</span><span>Lg</span></div>
+          <input type="range" id="font-s" min="8" max="36" value="13" title="Drag to change text size">
+        </div>
+      </div>
+      
+      <!-- ── ANNOTATIONS ─────────────────────────────── -->
+      <div class="key-row">
+        <div class="slabel">Annotations <span style="font-size:9px;text-transform:none;letter-spacing:0"></span></div>
+        <button class="clear-all-ann" onclick="clearAll()">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+          </svg>
+          Clear All
+        </button>
+      </div>
+      <div class="annot-list" id="annot-list"></div>
+      
+      <div class="divider"></div>
+
+      <!-- ── BLOCK KEY ───────────────────────────────── -->
+      <div class="key-row">
+        <div class="slabel" style="margin:0;flex:1">Block Key</div>
+        <button class="key-copy-btn" id="key-copy-btn" onclick="copyLabelKey()" title="Copy key to clipboard">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy
+        </button>
+      </div>
+      <div class="key-list" id="label-key"></div>
+
+    </div><!-- /sidebar -->
+
+    <div class="canvas-area" id="canvas-area">
+      <div class="drop-zone" id="drop-zone">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+        <h2>No image loaded</h2>
+        <p>Import a gross specimen photo to begin</p>
+        <button class="upload-btn-large" onclick="document.getElementById('file-input').click()">Choose Image</button>
+        <p style="font-size:11px;margin-top:4px;">or drag and drop here</p>
+      </div>
+      <div id="canvas-wrapper"><canvas id="main-canvas"></canvas></div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="stat" >Ctrl+Z/Y=Undo/Redo · S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Del=Delete</div>
+    <div class="stat" style="margin-left:auto">Tool: <span id="st-tool">Rectangle</span></div>
+    <div class="stat">Objects: <span id="st-count">0</span></div>
+    <div class="bar-sep"></div>
+    <div class="stat" id="st-dims"></div>
+    <button class="zoom-btn" onclick="adjustZoom(-25)" title="Zoom out">−</button>
+    <input type="range" id="zoom-slider" min="25" max="400" value="100" step="5" oninput="setZoom(+this.value)"
+      title="Zoom level">
+    <button class="zoom-btn" onclick="adjustZoom(+25)" title="Zoom in">+</button>
+    <span class="zoom-pct" id="zoom-pct">100%</span>
+    <button class="zoom-fit-btn" onclick="resetZoom()" title="Fit canvas to window">Reset</button>
+    <div class="bar-sep"></div>
+
+    <button class="privacy-link" id="ver-stat" onclick="document.getElementById('changelog-modal').classList.add('open')"
+      title="View changelog">PATHANNOTATE</button>
+      <button class="privacy-link" onclick="document.getElementById('privacy-modal').classList.add('open')"
+        title="Privacy policy">Privacy Policy</button>
+  </div>
+
+  <!-- Inline label editor -->
+  <div class="edit-popup" id="edit-popup">
+    <input type="text" id="edit-input" placeholder="Label…">
+    <button onclick="commitEdit()">✓</button>
+  </div>
+
+  <!-- Legend modal -->
+  <div class="modal-bg" id="legend-modal">
+    <div class="modal">
+      <h3>Insert Orientation Legend</h3>
+
+      <!-- Quick presets — clicking fills the fields AND previews immediately -->
+      <div class="preset-section">
+        <div class="preset-label">Quick Presets — click to apply</div>
+        <div class="preset-chips" id="preset-chips">
+          <!-- built by JS -->
+        </div>
+      </div>
+
+      <div class="mrow">
+        <div class="mf"><label>Superior</label><input id="leg-s" value="Superior" oninput="refreshPreview()"></div>
+        <div class="mf"><label>Inferior</label><input id="leg-i" value="Inferior" oninput="refreshPreview()"></div>
+      </div>
+      <div class="mrow">
+        <div class="mf"><label>Left</label><input id="leg-l" value="Anterior" oninput="refreshPreview()"></div>
+        <div class="mf"><label>Right</label><input id="leg-r" value="Posterior" oninput="refreshPreview()"></div>
+      </div>
+
+      <div class="mrow">
+        <div class="mf"><label>Position</label>
+          <select id="leg-pos">
+            <option value="br">Bottom Right</option>
+            <option value="bl">Bottom Left</option>
+            <option value="tr">Top Right</option>
+            <option value="tl">Top Left</option>
+          </select>
+        </div>
+        <div class="mf"><label>Text Color</label>
+          <select id="leg-col">
+            <option value="#ffffff">White</option>
+            <option value="#000000">Black</option>
+            <option value="#00e5c3">Teal</option>
+            <option value="#ff4444">Red</option>
+            <option value="#ff9900">Orange</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="leg-preview" id="leg-preview"></div>
+
+      <div class="modal-acts">
+        <button class="m-cancel" onclick="closeLegend()">Cancel</button>
+        <button class="m-ok" onclick="insertLegend()">Insert Legend</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Title modal -->
+  <div class="modal-bg" id="title-modal">
+    <div class="modal" style="width:380px">
+      <h3>Specimen Title</h3>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Displayed on the canvas and used as the export filename.<br>
+        Combined display: <em>Case Number</em> – <em>Specimen</em>.
+      </p>
+      <div class="mf">
+        <label>Case Number</label>
+        <input id="case-num-input" placeholder="e.g. SP-26-99999" style="font-size:13px">
+      </div>
+      <div class="mf" style="margin-top:8px">
+        <label>Specimen</label>
+        <input id="specimen-input" placeholder="e.g. 1 Left Thyroid" style="font-size:13px">
+      </div>
+      <div class="modal-acts">
+        <button class="m-cancel" onclick="closeTitle()">Cancel</button>
+        <button class="m-ok" onclick="applyTitle()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Privacy modal -->
+  <div class="modal-bg" id="privacy-modal">
+    <div class="modal" style="width:420px">
+      <h3>Privacy Policy</h3>
+      <p style="font-size:12px;line-height:1.6">This application runs entirely client-side. No information leaves your device.</p>
+      <p style="font-size:12px;line-height:1.6">Images, text, and other content remain in the browser's cache and are never sent externally.</p>
+      <p style="font-size:12px;line-height:1.6;color:var(--muted)">No analytics, tracking, or telemetry of any kind is collected or transmitted.</p>
+      <div class="modal-acts">
+        <button class="m-ok"
+          onclick="document.getElementById('privacy-modal').classList.remove('open')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Changelog modal -->
+  <div class="modal-bg" id="changelog-modal">
+    <div class="modal" style="width:460px">
+      <h3>Changelog</h3>
+      <p style="font-size:11px;margin-bottom:12px">
+        <a href="https://github.com/PathAnnotate/PathAnnotate" target="_blank" rel="noopener"
+           style="color:var(--accent);text-decoration:none">github.com/PathAnnotate/PathAnnotate</a>
+      </p>
+      <div style="font-family:'DM Mono',monospace;font-size:11px;line-height:1.7">
+        <div style="color:var(--accent);margin-bottom:4px">v1.2.0</div>
+        <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
+          <li>Added ⚠ warning to 'Block Key' for detected missing or duplicate blocks</li>
+        </ul>
+        <div style="color:var(--accent);margin-bottom:4px">v1.1.0</div>
+        <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
+          <li>Block text inferred based on specimen title: numeric specimen → A, B, C…; alpha → 1, 2, 3…</li>
+          <li>ANNOTATIONS list and BLOCK KEY scroll to the latest added item</li>
+          <li>Added Privacy Policy</li>
+          <li>README and external library attribution</li>
+        </ul>
+        <div style="color:var(--accent);margin-bottom:4px">v1.0.0</div>
+        <ul style="margin:0 0 0 16px;padding:0;color:var(--text)">
+          <li>Initial release: gross pathology image annotation with Fabric.js canvas</li>
+          <li>Rectangle, line, and block tools</li>
+          <li>Title with case number and specimen</li>
+          <li>Block key panel with per-block notes and clipboard copy</li>
+          <li>Save/load JSON sessions and export annotated images</li>
+          <li>Undo/redo, light/dark theme, drag-and-drop image import</li>
+        </ul>
+      </div>
+      <div class="modal-acts">
+        <button class="m-ok"
+          onclick="document.getElementById('changelog-modal').classList.remove('open')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*">
+  <input type="file" id="json-input" accept=".json">
+
+  <script>
+    'use strict';
+    // ═══════════════════════════════════════════════════════
+    //  VERSION
+    // ═══════════════════════════════════════════════════════
+    const VERSION = '1.2.0';
+    document.getElementById('logo-ver').textContent = 'v' + VERSION;
+    document.getElementById('ver-stat').textContent = 'PathAnnotate v' + VERSION;
+
+    // ═══════════════════════════════════════════════════════
+    //  CONFIG
+    // ═══════════════════════════════════════════════════════
+
+    // Professional pathology colors — visible on tissue photography
+    const COLORS = ['#00d4b8', '#e03535', '#ff8c00', '#ffffff', '#000000'];
+    // teal, red, orange, white, black
+
+    // Legend presets
+    const LEGEND_PRESETS = [
+      { label: 'Standard', sub: 'Sup/Inf + Ant/Post', s: 'Superior', i: 'Inferior', l: 'Anterior', r: 'Posterior' },
+      { label: 'Lateral', sub: 'Sup/Inf + Med/Lat', s: 'Superior', i: 'Inferior', l: 'Medial', r: 'Lateral' },
+      { label: 'Axial', sub: 'Ant/Post + R/L', s: 'Anterior', i: 'Posterior', l: 'Right', r: 'Left' },
+      { label: 'Coronal', sub: 'Sup/Inf + R/L', s: 'Superior', i: 'Inferior', l: 'Right', r: 'Left' },
+      { label: 'Proximal', sub: 'Prox/Dist + Med/Lat', s: 'Proximal', i: 'Distal', l: 'Medial', r: 'Lateral' },
+      { label: 'Radial', sub: 'Rad/Uln + Dors/Volar', s: 'Radial', i: 'Ulnar', l: 'Dorsal', r: 'Volar' },
+    ];
+
+    // Dash patterns for fabric
+    const DASH_PATTERNS = {
+      solid: null,
+      dashed: [10, 6],
+      dotted: [2, 5],
+    };
+
+    // ═══════════════════════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════════════════════
+    let cv;
+    let tool = 'rect';
+    let color = '#ffffff';   // default white; overridden by saved settings
+    let strokeW = 2;
+    let fontSize = 13;
+    let anchor = 'tl';
+    let anchorMode = 'anchor';   // 'anchor' | 'freeform'
+    let lineStyle = 'solid';
+    let pendingIncLabel = null;  // label used for last-drawn rect, cleared on deselect/next-draw
+
+    let txtEditJustExited = false;  // prevents creating new annotation on click-away from IText
+    let drawing = false, ox = 0, oy = 0, activeObj = null;
+    let annots = [];   // {id, shape, lbl, color, label, kind, notes, _freeOffset}
+    let annId = 0;
+    let selectedIds = new Set(); // ids selected in sidebar list
+    let lastMousePos = null;   // last known pointer position on canvas (for paste)
+    let clipboard = [];        // [{ann, relX, relY}] for Ctrl+C / Ctrl+V
+    let shiftHeld = false;     // tracks Shift key for line snapping
+    let lastSelectedAnn = null; // most recently selected annotation (for right-click paste)
+
+    let undoStack = [], redoStack = [], histLock = false;
+    let imgDataURL = null;
+    let baseW = 0, baseH = 0;   // original canvas dimensions (for zoom)
+    let currentZoom = 100;       // current zoom % (100 = 1:1)
+
+    // Specimen title fields (persisted in session)
+    let caseNum = '';
+    let specimenText = '';
+
+    // ═══════════════════════════════════════════════════════
+    //  THEME
+    // ═══════════════════════════════════════════════════════
+    let dark = false;
+    // Apply light mode immediately (before settings load overrides)
+    document.body.classList.add('light');
+
+    function updateThemeBtn() {
+      document.getElementById('theme-btn').innerHTML = dark
+        ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>Light`
+        : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>Dark`;
+    }
+    updateThemeBtn();
+
+    function toggleTheme() {
+      dark = !dark;
+      document.body.classList.toggle('light', !dark);
+      updateThemeBtn();
+      applyFabricTheme();
+      saveSettings();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  COLOR SWATCHES
+    // ═══════════════════════════════════════════════════════
+    (function buildSwatches() {
+      const row = document.getElementById('color-row');
+      COLORS.forEach(c => {
+        const el = document.createElement('div');
+        el.className = 'swatch' + (c === color ? ' active' : '');
+        el.style.background = c;
+        el.title = c;
+        if (c === '#000000' || c === '#ffffff') el.dataset.border = '1';
+        el.onclick = () => {
+          document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+          el.classList.add('active');
+          color = c;
+          if (!cv) return;
+          const obj = cv.getActiveObject();
+          if (!obj || obj._bg) return;
+          if (obj._kind === 'rect' || obj._kind === 'line') {
+            obj.set('stroke', c);
+            const a = annots.find(a => a.shape === obj);
+            if (a) { a.color = c; if (a.lbl) a.lbl.set('fill', c); }
+          } else if (obj._kind === 'text' || obj._kind === 'block' || obj._kind === 'lbl') {
+            obj.set('fill', c);
+            const a = annots.find(a => a.shape === obj || a.lbl === obj);
+            if (a) a.color = c;
+          }
+          cv.renderAll(); refreshList();
+          saveSettings();
+        };
+        row.appendChild(el);
+      });
+    })();
+
+    // ═══════════════════════════════════════════════════════
+    //  STROKE WIDTH SLIDER
+    // ═══════════════════════════════════════════════════════
+    document.getElementById('stroke-w').addEventListener('input', function () {
+      strokeW = +this.value;
+      document.getElementById('sw-val').textContent = strokeW + 'px';
+      saveSettings();
+      if (!cv) return;
+      const obj = cv.getActiveObject();
+      if (obj && !obj._bg && (obj._kind === 'rect' || obj._kind === 'line')) {
+        obj.set('strokeWidth', strokeW);
+        cv.renderAll();
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  FONT SIZE SLIDER
+    // ═══════════════════════════════════════════════════════
+    document.getElementById('font-s').addEventListener('input', function () {
+      fontSize = +this.value;
+      document.getElementById('fs-val').textContent = fontSize + 'px';
+      saveSettings();
+      if (!cv) return;
+      const obj = cv.getActiveObject();
+      if (!obj || obj._bg) return;
+      if (obj._kind === 'text' || obj._kind === 'block' || obj._kind === 'lbl') {
+        obj.set('fontSize', fontSize);
+        cv.renderAll();
+      } else if (obj._kind === 'rect') {
+        // Also resize the attached label and reglue its position
+        const a = annots.find(a => a.shape === obj);
+        if (a && a.lbl) { a.lbl.set('fontSize', fontSize); glueLbl(obj); }
+        cv.renderAll();
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  LINE STYLE
+    // ═══════════════════════════════════════════════════════
+    function setLineStyle(style) {
+      lineStyle = style;
+      ['solid', 'dashed', 'dotted'].forEach(s => {
+        document.getElementById('lstyle-' + s).classList.toggle('active', s === style);
+      });
+      saveSettings();
+      if (!cv) return;
+      const obj = cv.getActiveObject();
+      if (obj && !obj._bg && (obj._kind === 'line' || obj._kind === 'rect')) {
+        const dp = DASH_PATTERNS[style];
+        obj.set('strokeDashArray', dp);
+        cv.renderAll();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  ANCHOR / FREEFORM TOGGLE
+    // ═══════════════════════════════════════════════════════
+    function setAnchorMode(mode) {
+      anchorMode = mode;
+      document.getElementById('anchor-btn').classList.toggle('active', mode === 'anchor');
+      document.getElementById('freeform-btn').classList.toggle('active', mode === 'freeform');
+      saveSettings();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  BLOCK LABEL SPIN LOGIC + LIVE UPDATE
+    // ═══════════════════════════════════════════════════════
+    function getLbl() { return document.getElementById('block-label').value.trim() || '1'; }
+    function setLbl(v) { document.getElementById('block-label').value = v; }
+
+    // Live-update the selected annotation's label while the user types
+    document.getElementById('block-label').addEventListener('input', function () {
+      saveSettings();
+      if (!cv) return;
+      const v = this.value.trim(); if (!v) return;
+      const obj = cv.getActiveObject();
+      if (!obj || obj._bg) return;
+      if (obj._kind === 'text' || obj._kind === 'block') {
+        obj.set('text', v);
+        const a = annots.find(a => a.shape === obj); if (a) a.label = v;
+        cv.renderAll();
+      } else if (obj._kind === 'lbl') {
+        obj.set('text', v);
+        const a = annots.find(a => a.lbl === obj); if (a) a.label = v;
+        cv.renderAll();
+      } else if (obj._kind === 'rect') {
+        const a = annots.find(a => a.shape === obj);
+        if (a) {
+          a.label = v;
+          if (a.lbl) { a.lbl.set('text', v); cv.renderAll(); }
+          pendingIncLabel = v;  // keep pending in sync if user edits label directly
+        }
+      }
+      refreshLabelKey();
+    });
+
+    // Alpha helpers — base-26, 1-indexed: A=1, Z=26, AA=27, AZ=52, BA=53 …
+    function alphaVal(s) {
+      let n = 0;
+      for (let i = 0; i < s.length; i++) n = n * 26 + (s.toUpperCase().charCodeAt(i) - 64);
+      return n;
+    }
+    function alphaFromVal(n, upper) {
+      const letters = upper ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' : 'abcdefghijklmnopqrstuvwxyz';
+      let r = '';
+      while (n > 0) { r = letters[(n - 1) % 26] + r; n = Math.floor((n - 1) / 26); }
+      return r || (upper ? 'A' : 'a');
+    }
+    function nextAlpha(s) { return alphaFromVal(alphaVal(s) + 1, s === s.toUpperCase()); }
+    function prevAlpha(s) {
+      const v = alphaVal(s); if (v <= 1) return s;
+      return alphaFromVal(v - 1, s === s.toUpperCase());
+    }
+
+    // Apply a new label value to the block-label input, and if a rect or block
+    // annotation is currently selected, update its label and attached text in-place.
+    function applySpinResult(newV) {
+      setLbl(newV);
+      saveSettings();
+      if (!cv) return;
+      const obj = cv.getActiveObject();
+      if (!obj || obj._bg) return;
+      if (obj._kind === 'rect') {
+        const a = annots.find(a => a.shape === obj);
+        if (!a) return;
+        a.label = newV;
+        if (a.lbl) { a.lbl.set('text', newV); cv.renderAll(); }
+        // Keep pendingIncLabel in sync so deselect auto-increments from the new value
+        pendingIncLabel = newV;
+        refreshList(); refreshLabelKey();
+      } else if (obj._kind === 'block') {
+        const a = annots.find(a => a.shape === obj);
+        if (!a) return;
+        a.label = newV;
+        obj.set('text', newV);
+        cv.renderAll();
+        refreshList(); refreshLabelKey();
+      } else if (obj._kind === 'lbl') {
+        const a = annots.find(a => a.lbl === obj);
+        if (!a) return;
+        a.label = newV;
+        obj.set('text', newV);
+        cv.renderAll();
+        if (a.shape && a.shape._kind === 'rect') pendingIncLabel = newV;
+        refreshList(); refreshLabelKey();
+      }
+    }
+
+    function spinPlus() {
+      const v = getLbl();
+      const rm = v.match(/^(\d+)-(\d+)$/);
+      if (rm) { applySpinResult(`${rm[1]}-${+rm[2] + 1}`); return; }
+      const nm = v.match(/^(\d+)$/);
+      if (nm) { applySpinResult(`${+nm[1]}-${+nm[1] + 1}`); return; }
+      const am = v.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      if (am) { applySpinResult(`${am[1]}-${nextAlpha(am[2])}`); return; }
+      if (/^[A-Za-z]+$/.test(v)) { applySpinResult(`${v}-${nextAlpha(v)}`); return; }
+    }
+
+    function spinMinus() {
+      const v = getLbl();
+      const rm = v.match(/^(\d+)-(\d+)$/);
+      if (rm) {
+        const lo = +rm[1], hi = +rm[2];
+        applySpinResult(hi - 1 <= lo ? String(lo) : `${lo}-${hi - 1}`);
+        return;
+      }
+      const nm = v.match(/^(\d+)$/);
+      if (nm) { applySpinResult(String(Math.max(1, +nm[1] - 1))); return; }
+      const am = v.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      if (am) {
+        const prev = prevAlpha(am[2]);
+        applySpinResult(alphaVal(prev) <= alphaVal(am[1]) ? am[1] : `${am[1]}-${prev}`);
+        return;
+      }
+      if (/^[A-Za-z]+$/.test(v)) { applySpinResult(prevAlpha(v)); return; }
+    }
+
+    // Returns true if text is a valid block label:
+    // single digit(s), capital letters, or a range of either (e.g. 1, 2-4, A, B-D)
+    function isBlockLabel(text) {
+      if (!text) return false;
+      const t = text.trim();
+      return /^(\d+(-\d+)?|[A-Z]+(-[A-Z]+)?)$/.test(t);
+    }
+
+    function autoInc(used) {
+      // Build the set of every individual block value already in the key
+      const taken = new Set();
+      getBlockAnnotations().forEach(a => {
+        const lbl = (a.kind === 'text' || a.kind === 'block')
+          ? ((a.shape && a.shape.text) || a.label || '').trim()
+          : (a.label || '').trim();
+        expandBlockLabel(lbl).forEach(v => taken.add(v));
+      });
+
+      // Determine alpha vs numeric from the label that was just used
+      const isAlpha = /[A-Za-z]/.test(used);
+
+      // Scan the sequence from its natural start (A / 1) and return the first gap
+      const MAX = 10000;
+      if (isAlpha) {
+        for (let i = 1; i <= MAX; i++) {
+          const c = alphaFromVal(i, true);
+          if (!taken.has(c)) { setLbl(c); return; }
+        }
+      } else {
+        for (let i = 1; i <= MAX; i++) {
+          if (!taken.has(String(i))) { setLbl(String(i)); return; }
+        }
+      }
+
+      // Absolute fallback — only reached if MAX is exhausted (practically impossible)
+      const rm = used.match(/^(\d+)-(\d+)$/);
+      if (rm) { setLbl(String(+rm[2] + 1)); return; }
+      const nm = used.match(/^(\d+)$/);
+      if (nm) { setLbl(String(+nm[1] + 1)); return; }
+      const am = used.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      if (am) { setLbl(nextAlpha(am[2])); return; }
+      if (/^[A-Za-z]+$/.test(used)) { setLbl(nextAlpha(used)); return; }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SETTINGS PERSISTENCE
+    // ═══════════════════════════════════════════════════════
+    const SETTINGS_KEY = 'pathannotate_settings';
+
+    function saveSettings() {
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+          color, strokeW, fontSize, anchor, anchorMode, lineStyle, dark,
+          lbl: getLbl(),
+        }));
+      } catch (e) {}
+    }
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if (!raw) return;
+        const s = JSON.parse(raw);
+        if (!s) return;
+        if (s.color) {
+          color = s.color;
+          document.querySelectorAll('.swatch').forEach(el => el.classList.toggle('active', el.title === color));
+        }
+        if (s.strokeW) {
+          strokeW = +s.strokeW;
+          document.getElementById('stroke-w').value = strokeW;
+          document.getElementById('sw-val').textContent = strokeW + 'px';
+        }
+        if (s.fontSize) {
+          fontSize = +s.fontSize;
+          document.getElementById('font-s').value = fontSize;
+          document.getElementById('fs-val').textContent = fontSize + 'px';
+        }
+        if (s.anchor) anchor = s.anchor;
+        if (s.anchorMode) setAnchorMode(s.anchorMode);
+        if (s.lineStyle) setLineStyle(s.lineStyle);
+        if (typeof s.dark === 'boolean' && s.dark !== dark) toggleTheme();
+        if (s.lbl) setLbl(s.lbl);
+      } catch (e) {}
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  INDEXEDDB — photo persistence
+    // ═══════════════════════════════════════════════════════
+    const IDB_NAME = 'pathannotate_idb', IDB_STORE = 'photo', IDB_PHOTO_KEY = 'current';
+
+    function openPhotoIDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = reject;
+      });
+    }
+
+    async function savePhotoToIDB(dataURL) {
+      try {
+        const db = await openPhotoIDB();
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(dataURL, IDB_PHOTO_KEY);
+      } catch (e) {}
+    }
+
+    async function loadPhotoFromIDB() {
+      try {
+        const db = await openPhotoIDB();
+        return new Promise((resolve) => {
+          const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(IDB_PHOTO_KEY);
+          req.onsuccess = e => resolve(e.target.result || null);
+          req.onerror   = () => resolve(null);
+        });
+      } catch (e) { return null; }
+    }
+
+    async function clearPhotoIDB() {
+      try {
+        const db = await openPhotoIDB();
+        db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).delete(IDB_PHOTO_KEY);
+      } catch (e) {}
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  RESET ALL — clears everything back to blank state
+    // ═══════════════════════════════════════════════════════
+    function resetAll() {
+      if (!confirm('Reset everything? This will clear all annotations and remove the current photo.')) return;
+      clearPhotoIDB();
+      localStorage.removeItem(LS_KEY);
+      annots = []; selectedIds.clear(); annId = 0;
+      caseNum = ''; specimenText = '';
+      imgDataURL = null; baseW = 0; baseH = 0;
+      setLbl('1');  // reset block label counter
+      currentZoom = 100;
+      document.getElementById('zoom-slider').value = 100;
+      document.getElementById('zoom-pct').textContent = '100%';
+      if (cv) { cv.dispose(); cv = null; }
+      document.getElementById('drop-zone').style.display = '';
+      document.getElementById('canvas-wrapper').style.display = 'none';
+      document.getElementById('file-name').textContent = 'no image loaded';
+      document.getElementById('st-dims').textContent = '';
+      refreshList(); refreshCount();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  REPLACE BACKGROUND — swap photo without clearing annotations
+    // ═══════════════════════════════════════════════════════
+    function replaceBackground(dataURL, name) {
+      imgDataURL = dataURL;
+      savePhotoToIDB(dataURL);
+      if (name) {
+        document.getElementById('file-name').textContent = name;
+        const tmp = new Image();
+        tmp.onload = () => { document.getElementById('st-dims').textContent = `${tmp.width}×${tmp.height}`; };
+        tmp.src = dataURL;
+      }
+      cv.getObjects().filter(o => o._bg).forEach(o => cv.remove(o));
+      fabric.Image.fromURL(dataURL, fImg => {
+        fImg.scaleToWidth(cv.width); fImg.scaleToHeight(cv.height);
+        lockBg(fImg);
+        cv.add(fImg);
+        cv.sendToBack(fImg);
+        cv.renderAll();
+        pushHist();
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  IMAGE LOADING
+    // ═══════════════════════════════════════════════════════
+    document.getElementById('file-input').addEventListener('change', e => { if (e.target.files[0]) readImg(e.target.files[0]); });
+    document.getElementById('json-input').addEventListener('change', e => { if (e.target.files[0]) readSession(e.target.files[0]); });
+
+    const dropArea = document.getElementById('canvas-area');
+    dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.style.outline = '2px dashed var(--accent)'; });
+    dropArea.addEventListener('dragleave', () => { dropArea.style.outline = ''; });
+    dropArea.addEventListener('drop', e => {
+      e.preventDefault(); dropArea.style.outline = '';
+      const file = e.dataTransfer.files[0]; if (!file) return;
+      if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') readSession(file);
+      else readImg(file);
+    });
+
+    function readImg(file) {
+      const r = new FileReader();
+      r.onload = ev => {
+        const dataURL = ev.target.result;
+        // If annotations already exist, preserve them — just swap the background
+        if (cv && annots.length > 0) {
+          replaceBackground(dataURL, file.name);
+        } else {
+          imgDataURL = dataURL;
+          savePhotoToIDB(dataURL);
+          initCanvas(dataURL, file.name);
+        }
+      };
+      r.readAsDataURL(file);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  FABRIC.JS THEME — match app accent color
+    // ═══════════════════════════════════════════════════════
+    function applyFabricTheme() {
+      if (!cv) return;
+      const accent = '#00d4b8';
+      cv.set({
+        selectionColor: 'rgba(0,212,184,0.07)',
+        selectionBorderColor: accent,
+        selectionLineWidth: 1,
+      });
+      fabric.Object.prototype.set({
+        borderColor: accent,
+        borderScaleFactor: 1.5,
+        cornerColor: '#ffffff',
+        cornerStrokeColor: accent,
+        cornerStyle: 'rect',
+        transparentCorners: false,
+      });
+      cv.renderAll();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  ZOOM
+    // ═══════════════════════════════════════════════════════
+    function setZoom(pct) {
+      if (!cv || !baseW) return;
+      pct = Math.max(25, Math.min(400, pct));
+      currentZoom = pct;
+      const factor = pct / 100;
+      cv.setZoom(factor);
+      cv.setDimensions({ width: Math.round(baseW * factor), height: Math.round(baseH * factor) });
+      document.getElementById('zoom-slider').value = pct;
+      document.getElementById('zoom-pct').textContent = pct + '%';
+    }
+
+    function adjustZoom(delta) {
+      setZoom(currentZoom + delta);
+    }
+
+    function resetZoom() {
+      setZoom(100);
+    }
+
+    function initCanvas(dataURL, name, afterCb) {
+      const img = new Image();
+      img.onload = () => {
+        document.getElementById('drop-zone').style.display = 'none';
+        document.getElementById('canvas-wrapper').style.display = 'block';
+
+        const area = document.getElementById('canvas-area');
+        const maxW = area.clientWidth - 40, maxH = area.clientHeight - 40;
+        const sc = Math.min(maxW / img.width, maxH / img.height, 1);
+        const W = Math.round(img.width * sc), H = Math.round(img.height * sc);
+
+        if (!cv) {
+          cv = new fabric.Canvas('main-canvas', { selection: false, preserveObjectStacking: true });
+          applyFabricTheme();
+          setupEvents();
+        }
+        baseW = W; baseH = H;
+        currentZoom = 100;
+        document.getElementById('zoom-slider').value = 100;
+        document.getElementById('zoom-pct').textContent = '100%';
+        cv.setZoom(1);
+        cv.setWidth(W); cv.setHeight(H);
+        cv.clear();
+        annots = []; annId = 0; selectedIds.clear();
+        undoStack = []; redoStack = [];
+        refreshList(); refreshCount(); syncHistBtns();
+
+        fabric.Image.fromURL(dataURL, fImg => {
+          fImg.scaleToWidth(W); fImg.scaleToHeight(H);
+          lockBg(fImg);
+          cv.add(fImg);
+          cv.sendToBack(fImg);
+          cv.renderAll();
+          pushHist();
+          if (afterCb) afterCb();
+        });
+
+        if (name) {
+          document.getElementById('file-name').textContent = name;
+          document.getElementById('st-dims').textContent = `${img.width}×${img.height}`;
+        }
+      };
+      img.src = dataURL;
+    }
+
+    function lockBg(obj) {
+      obj.set({
+        selectable: false, evented: false,
+        lockMovementX: true, lockMovementY: true,
+        lockScalingX: true, lockScalingY: true, lockRotation: true,
+        hasControls: false, hasBorders: false, _bg: true,
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  CANVAS EVENTS
+    // ═══════════════════════════════════════════════════════
+    function setupEvents() {
+
+      cv.on('mouse:down', opt => {
+        if (tool === 'select') return;
+        // Guard: if editing just exited (click-away from IText), swallow this click
+        if (txtEditJustExited) { txtEditJustExited = false; return; }
+        // Flush any pending auto-increment on every canvas click (before the
+        // non-background guard) so clicking on a label still increments correctly.
+        if (pendingIncLabel !== null) { autoInc(pendingIncLabel); pendingIncLabel = null; }
+        // If the click lands on an existing non-background object (e.g. a resize
+        // handle or label), don't start a new drawing operation.
+        if (opt.target && !opt.target._bg) return;
+        const p = cv.getPointer(opt.e);
+
+        if (tool === 'block') {
+          // Place block label at click position WITHOUT entering edit mode
+          const lbl = getLbl();
+          const txt = new fabric.IText(lbl, {
+            left: p.x, top: p.y,
+            fontSize,
+            fontFamily: 'DM Mono, monospace',
+            fill: color,
+            shadow: makeShadow(),
+            padding: 20,
+            cornerSize: 10,
+            selectable: true, evented: true,
+            _kind: 'block', _annId: ++annId,
+          });
+          cv.add(txt);
+          cv.setActiveObject(txt);
+          cv.renderAll();
+          const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
+          annots.push(ann);
+          pendingIncLabel = lbl;
+          txt.on('editing:exited', () => {
+            txtEditJustExited = true;
+            ann.label = txt.text.trim() || ann.label;
+            refreshList(); refreshCount(); pushHist();
+          });
+          // If anchor mode is on, snap the block label to the nearest hotpoint
+          // of any rectangle it was placed inside.
+          if (anchorMode === 'anchor') snapBlockToRect(ann);
+          refreshList(true); refreshCount(); pushHist();
+          return;
+        }
+
+        if (tool === 'text') {
+          // Free-form text — enters editing immediately, not tracked as block
+          const txt = new fabric.IText('', {
+            left: p.x, top: p.y,
+            fontSize,
+            fontFamily: 'DM Mono, monospace',
+            fill: color,
+            shadow: makeShadow(),
+            padding: 12,
+            selectable: true, evented: true,
+            _kind: 'text', _annId: ++annId,
+          });
+          cv.add(txt);
+          cv.setActiveObject(txt);
+          txt.enterEditing();
+          cv.renderAll();
+          txt.once('editing:exited', () => {
+            txtEditJustExited = true;
+            const finalLbl = txt.text.trim();
+            if (!finalLbl) { cv.remove(txt); annId--; refreshList(); refreshCount(); return; }
+            const ann = { id: txt._annId, shape: txt, lbl: null, color, label: finalLbl, kind: 'text', notes: '' };
+            annots.push(ann);
+            // annots.push is deferred to here (after editing:exited), so
+            // selection:created couldn't find this ann; set lastSelectedAnn
+            // now so right-click paste immediately targets the new text object.
+            lastSelectedAnn = ann;
+            refreshList(true); refreshCount(); pushHist();
+          });
+          return;
+        }
+
+        drawing = true; ox = p.x; oy = p.y;
+        const dp = DASH_PATTERNS[lineStyle];
+
+        if (tool === 'rect') {
+          activeObj = new fabric.Rect({
+            left: ox, top: oy, width: 0, height: 0,
+            stroke: color, strokeWidth: strokeW, fill: 'transparent',
+            strokeUniform: true, strokeDashArray: dp,
+            selectable: false, evented: false,
+            _kind: 'rect', _annId: ++annId,
+          });
+        } else {
+          activeObj = new fabric.Line([ox, oy, ox, oy], {
+            stroke: color, strokeWidth: strokeW,
+            strokeLineCap: 'round', strokeDashArray: dp,
+            padding: 8, selectable: false, evented: false,
+            _kind: 'line', _annId: ++annId,
+          });
+        }
+        cv.add(activeObj);
+      });
+
+      cv.on('mouse:move', opt => {
+        const p = cv.getPointer(opt.e);
+        lastMousePos = p;
+        if (!drawing || !activeObj) return;
+        if (tool === 'rect') {
+          let l = ox, t = oy, w = p.x - ox, h = p.y - oy;
+          if (w < 0) { l = p.x; w = -w; } if (h < 0) { t = p.y; h = -h; }
+          activeObj.set({ left: l, top: t, width: w, height: h });
+        } else {
+          // Line: Shift snaps to horizontal or vertical
+          let ex = p.x, ey = p.y;
+          if (shiftHeld) {
+            const dx = Math.abs(p.x - ox), dy = Math.abs(p.y - oy);
+            if (dx >= dy) ey = oy;   // horizontal snap
+            else          ex = ox;   // vertical snap
+          }
+          activeObj.set({ x2: ex, y2: ey });
+        }
+        cv.renderAll();
+      });
+
+      cv.on('mouse:up', () => {
+        if (!drawing || !activeObj) return;
+        drawing = false;
+
+        let tiny = false;
+        if (tool === 'rect') tiny = activeObj.width < 5 || activeObj.height < 5;
+        else { const dx = activeObj.x2 - activeObj.x1, dy = activeObj.y2 - activeObj.y1; tiny = Math.hypot(dx, dy) < 10; }
+
+        if (tiny) { cv.remove(activeObj); annId--; activeObj = null; return; }
+
+        activeObj.set({ selectable: true, evented: true });
+        addCopyControls(activeObj);
+        const usedLbl = getLbl();
+        let lblObj = null;
+
+        const showLabel = document.getElementById('show-label').checked;
+        if (tool === 'rect' && showLabel) {
+          lblObj = makeLblText(usedLbl, activeObj);
+          cv.add(lblObj);
+        }
+
+        const noBlock = tool === 'rect' && !showLabel;
+        annots.push({ id: activeObj._annId, shape: activeObj, lbl: lblObj, color, label: usedLbl, kind: tool, notes: '', noBlock });
+
+        if (tool === 'rect') {
+          // Fabric's internal _onMouseUp cleanup calls discardActiveObject() after
+          // this handler returns (because canvas.selection=false and the rect was
+          // selectable:false at mousedown time, so Fabric's hit-test found target=null).
+          // Deferring past that cleanup ensures the rect stays selected.
+          const drawnObj = activeObj;
+          setTimeout(() => { cv.setActiveObject(drawnObj); cv.renderAll(); }, 0);
+        } else {
+          cv.setActiveObject(activeObj);
+        }
+
+        // Don't auto-increment yet — let the user edit the label or range before
+        // the next object is drawn.  pendingIncLabel is flushed on deselect or
+        // on the next mouse:down (before drawing begins).
+        if (tool === 'rect' && showLabel) pendingIncLabel = usedLbl;
+
+        refreshList(true); refreshCount(); pushHist();
+        activeObj = null;
+      });
+
+      cv.on('selection:created', opt => {
+        const obj = cv.getActiveObject();
+        if (obj && !obj._bg) {
+          const a = annots.find(a => a.shape === obj || a.lbl === obj);
+          if (a) {
+            lastSelectedAnn = a;
+            // Highlight this item in the sidebar and scroll it into view
+            selectedIds.clear();
+            selectedIds.add(a.id);
+            refreshList();
+            const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
+            if (el) el.scrollIntoView({ block: 'nearest' });
+            return; // refreshList already called syncSidebar via re-render
+          }
+        }
+        syncSidebar();
+      });
+      cv.on('selection:updated', opt => {
+        // Flush pending increment when user moves to a different object
+        if (pendingIncLabel !== null) { autoInc(pendingIncLabel); pendingIncLabel = null; }
+        const obj = cv.getActiveObject();
+        if (obj && !obj._bg) {
+          const a = annots.find(a => a.shape === obj || a.lbl === obj);
+          if (a) {
+            lastSelectedAnn = a;
+            selectedIds.clear();
+            selectedIds.add(a.id);
+            refreshList();
+            const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
+            if (el) el.scrollIntoView({ block: 'nearest' });
+            syncSidebar();
+            return;
+          }
+        }
+        syncSidebar();
+      });
+      cv.on('selection:cleared', () => {
+        if (pendingIncLabel !== null) { autoInc(pendingIncLabel); pendingIncLabel = null; }
+        document.querySelectorAll('.ann-item').forEach(i => i.classList.remove('sel'));
+        updateToolbarState();
+      });
+
+      cv.on('object:moving', opt => {
+        const obj = opt.target;
+        // If moving a label in freeform mode, track its offset from the parent rect center
+        if (obj._kind === 'lbl' && anchorMode === 'freeform') {
+          const a = annots.find(a => a.lbl === obj);
+          if (a && a.shape) {
+            const center = a.shape.getCenterPoint();
+            a._freeOffset = { x: obj.left - center.x, y: obj.top - center.y };
+          }
+          return;
+        }
+        // If moving a block label that is anchored to a rect in freeform mode,
+        // clear its rect anchor so it can be dragged freely.
+        if (obj._kind === 'block') {
+          const a = annots.find(a => a.shape === obj);
+          if (a && anchorMode === 'freeform') {
+            a._anchorRect = null; a._anchorPoint = null;
+          }
+          return;
+        }
+        glueLbl(obj);
+        // When a rect moves, also move any block labels anchored to it
+        if (obj._kind === 'rect') glueAnchoredBlocks(obj);
+        // Shift-constrain: lock movement to the dominant axis for lines
+        if (shiftHeld && obj._kind === 'line') {
+          if (!obj._snapStart) obj._snapStart = { left: obj.left, top: obj.top };
+          const s = obj._snapStart;
+          const dx = Math.abs(obj.left - s.left), dy = Math.abs(obj.top - s.top);
+          if (dx >= dy) obj.set('top', s.top);
+          else          obj.set('left', s.left);
+        } else {
+          obj._snapStart = null;
+        }
+      });
+      cv.on('object:scaling', opt => {
+        glueLbl(opt.target);
+        if (opt.target._kind === 'rect') glueAnchoredBlocks(opt.target);
+      });
+      cv.on('object:rotating', opt => {
+        glueLbl(opt.target);
+        if (opt.target._kind === 'rect') glueAnchoredBlocks(opt.target);
+      });
+      cv.on('object:modified', opt => {
+        const obj = opt.target;
+        // When a label is dropped in anchor mode, snap it to the nearest hotpoint
+        if (obj && obj._kind === 'lbl' && anchorMode === 'anchor') {
+          const a = annots.find(a => a.lbl === obj);
+          if (a && a.shape) {
+            anchor = nearestHotpoint(obj, a.shape);
+            glueLbl(a.shape);
+          }
+        }
+
+        //attempting fix here for lbl --jesse UPDATE issue was elsewhere... work around was selecting the rect object after its creation, now it's automatically 'selected'
+        // if (obj && obj._kind === 'block' && anchorMode === 'anchor') {
+        //   const a = annots.find(a => a.shape === obj);
+        //   if (a && a.shape) {
+        //     snapBlockToRect(a);       // snap to nearest rect
+        //     glueLbl(a.shape);          // glue its label if attached
+        //   }
+        // }
+
+        // When a block label is dropped in anchor mode, snap it to the nearest
+        // hotpoint of any rect it is inside.
+        if (obj && obj._kind === 'block' && anchorMode === 'anchor') {
+          const a = annots.find(a => a.shape === obj);
+          if (a) snapBlockToRect(a);
+        }
+        pushHist();
+      });
+
+      cv.on('mouse:dblclick', opt => {
+        const obj = opt.target;
+        if (!obj || obj._bg) return;
+        // Double-clicking a title object opens the title modal instead of inline editing
+        if (obj.isTitle) { openTitle(); return; }
+        // Native IText editing — covers text labels AND legend IText objects
+        if (obj.type === 'i-text') { obj.enterEditing(); return; }
+        const a = annots.find(a => a.shape === obj || a.lbl === obj);
+        if (!a) return;
+        // Double-clicking a line opens the text label popup (defaulting to "Label")
+        //if (a.kind === 'line') { openLineLabel(a, opt.e); return; }
+        if (a.kind === 'line') {return; } // lines should not have labels
+        openEdit(a, opt.e);
+      });
+
+      // Right-click: paste a copy of the last selected annotation at the cursor position
+      cv.upperCanvasEl.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        if (!lastSelectedAnn) return;
+        const p = cv.getPointer(e);
+        pasteAnnotationAt(lastSelectedAnn, p.x, p.y);
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  COPY CONTROLS — + buttons on all 4 sides of rect/line
+    // ═══════════════════════════════════════════════════════
+    function renderCopyBtn(ctx, left, top, styleOverride, fabricObject) {
+      // Match the visual style of Fabric.js's native resize/rotate controls so
+      // the copy buttons blend seamlessly with the selection bounding box.
+      const size = (fabricObject && fabricObject.cornerSize) || 13;
+      const half = size / 2;
+      ctx.save();
+      ctx.fillStyle   = (fabricObject && fabricObject.cornerColor) || 'rgba(255,255,255,0.92)';
+      ctx.strokeStyle = (fabricObject && fabricObject.cornerStrokeColor) || 'rgba(0,0,0,0.25)';
+      ctx.lineWidth   = 1;
+      ctx.fillRect(left - half, top - half, size, size);
+      ctx.strokeRect(left - half, top - half, size, size);
+      ctx.fillStyle    = 'rgba(0,0,0,0.72)';
+      ctx.font         = `bold ${Math.round(size * 0.85)}px sans-serif`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('+', left, top + 0.5);
+      ctx.restore();
+    }
+
+    function addCopyControls(obj) {
+      if (obj._kind !== 'rect' && obj._kind !== 'line') return;
+      const off = 22;
+      const cs = 20;
+      const makeHandler = dir => (evtData, transform) => { duplicateAnnotation(transform.target, dir); return true; };
+      const ctrl = (x, y, ox, oy, dir) => new fabric.Control({
+        x, y, offsetX: ox, offsetY: oy,
+        cursorStyle: 'copy',
+        mouseUpHandler: makeHandler(dir),
+        render: renderCopyBtn,
+        cornerSize: cs,
+      });
+      obj.controls = Object.assign({}, obj.controls, {
+        copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
+        copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
+        copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
+        copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
+      });
+    }
+
+    function duplicateAnnotation(obj, direction) {
+      const ann = annots.find(a => a.shape === obj);
+      if (!ann) return;
+
+      const angle = ((obj.angle || 0) * Math.PI) / 180;
+      // getScaledWidth/Height already include stroke contribution in Fabric.js v5,
+      // so no extra addition is needed — duplicates will touch with zero gap.
+      const W = obj.getScaledWidth();
+      const H = obj.getScaledHeight();
+
+      const center = obj.getCenterPoint();
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+
+      let dx = 0, dy = 0;
+      if (direction === 'right')  { dx =  cos * W; dy =  sin * W; }
+      if (direction === 'left')   { dx = -cos * W; dy = -sin * W; }
+      if (direction === 'bottom') { dx = -sin * H; dy =  cos * H; }
+      if (direction === 'top')    { dx =  sin * H; dy = -cos * H; }
+
+      const ncx = center.x + dx, ncy = center.y + dy;
+
+      obj.clone(cloned => {
+        cloned._annId = ++annId;
+        cloned.setPositionByOrigin(new fabric.Point(ncx, ncy), 'center', 'center');
+        cloned.set({ selectable: true, evented: true, angle: obj.angle || 0 });
+        addCopyControls(cloned);
+        cv.add(cloned);
+
+        const usedLbl = getLbl();
+        let lblObj = null;
+        const showLabel = document.getElementById('show-label').checked;
+        if (ann.kind === 'rect' && showLabel && !ann.noBlock) {
+          lblObj = makeLblText(usedLbl, cloned);
+          cv.add(lblObj);
+        }
+        if (ann.kind === 'block') {
+          cloned.set('text', usedLbl);
+        }
+
+        annots.push({ id: cloned._annId, shape: cloned, lbl: lblObj, color, label: usedLbl, kind: ann.kind, notes: '', noBlock: ann.noBlock });
+        cv.setActiveObject(cloned);
+        if ((ann.kind === 'rect' && !ann.noBlock) || ann.kind === 'block') autoInc(usedLbl);
+        refreshList(); refreshCount(); pushHist();
+        cv.renderAll();
+      }, JSON_PROPS);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  LABEL HELPERS
+    // ═══════════════════════════════════════════════════════
+    // lx/ly: edge multipliers  -1=left/top  0=center  +1=right/bottom
+    // lox: fixed local-x pixel nudge; oyFn: returns local-y nudge (reads fontSize at call time)
+    const ANCHOR_MAP = {
+      tl: { lx:-1, ly:-1, lox: 4, oyFn:()=> 2,           ox:'left'   },
+      tc: { lx: 0, ly:-1, lox: 0, oyFn:()=> 2,           ox:'center' },
+      tr: { lx: 1, ly:-1, lox:-4, oyFn:()=> 2,           ox:'right'  },
+      ml: { lx:-1, ly: 0, lox: 4, oyFn:()=>-fontSize/2,  ox:'left'   },
+      mc: { lx: 0, ly: 0, lox: 0, oyFn:()=>-fontSize/2,  ox:'center' },
+      mr: { lx: 1, ly: 0, lox:-4, oyFn:()=>-fontSize/2,  ox:'right'  },
+      bl: { lx:-1, ly: 1, lox: 4, oyFn:()=>-fontSize-4,  ox:'left'   },
+      bc: { lx: 0, ly: 1, lox: 0, oyFn:()=>-fontSize-4,  ox:'center' },
+      br: { lx: 1, ly: 1, lox:-4, oyFn:()=>-fontSize-4,  ox:'right'  },
+    };
+
+    function lblPos(shape) {
+      const a = ANCHOR_MAP[anchor] || ANCHOR_MAP.tl;
+      // Use the object's actual center point and rotate offsets into canvas space.
+      // This keeps labels correctly anchored even when the rect is rotated.
+      const center = shape.getCenterPoint();
+      const angle  = ((shape.angle || 0) * Math.PI) / 180;
+      const W = shape.width  * (shape.scaleX || 1);
+      const H = shape.height * (shape.scaleY || 1);
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      // When rotated, pull the label 80 % of the way toward the center so it
+      // sits clearly inside the rectangle and doesn't obscure the border.
+      const edgeFrac = shape.angle ? 0.8 : 1;
+      const localX = a.lx * (W / 2 * edgeFrac) + a.lox;
+      const localY = a.ly * (H / 2 * edgeFrac) + a.oyFn();
+      return {
+        x: center.x + localX * cos - localY * sin,
+        y: center.y + localX * sin + localY * cos,
+        originX: a.ox,
+      };
+    }
+
+    function makeShadow() {
+      return new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 4, offsetX: 1, offsetY: 1 });
+    }
+
+    function makeLblText(text, shape) {
+      const p = lblPos(shape);
+      return new fabric.Text(text, {
+        left: p.x, top: p.y, originX: p.originX,
+        fontSize, fontFamily: 'DM Mono, monospace',
+        fill: color,
+        shadow: makeShadow(),
+        padding: 12,
+        selectable: true, evented: true,
+        _kind: 'lbl', _annId: shape._annId,
+      });
+    }
+
+    function glueLbl(shape) {
+      if (shape._kind !== 'rect') return;
+      const a = annots.find(a => a.shape === shape);
+      if (!a || !a.lbl) return;
+      if (anchorMode === 'freeform' && a._freeOffset) {
+        const center = shape.getCenterPoint();
+        a.lbl.set({ left: center.x + a._freeOffset.x, top: center.y + a._freeOffset.y });
+      } else {
+        const p = lblPos(shape);
+        a.lbl.set({ left: p.x, top: p.y, originX: p.originX });
+      }
+      cv.renderAll();
+    }
+
+    // Returns the rect annotation that contains point (px, py), or null.
+    function rectContaining(px, py) {
+      const rects = annots.filter(a => a.kind === 'rect' && a.shape);
+      for (const r of rects) {
+        if (r.shape.containsPoint(new fabric.Point(px, py))) return r;
+      }
+      return null;
+    }
+
+    // Snap a block label to the nearest of the 9 hotpoints on its target rectangle.
+    // Works identically for labeled and unlabeled rects.
+    // Priority:
+    //   1. Dropped INSIDE a rect  → anchor/re-anchor to that rect.
+    //   2. Dropped OUTSIDE all rects but already anchored → re-snap to the same rect
+    //      (lets the user nudge the hotpoint without needing to re-enter the rect).
+    //   3. Dropped outside all rects with no prior anchor → clear and do nothing.
+    function snapBlockToRect(ann) {
+      if (!ann || ann.kind !== 'block') return;
+      const obj = ann.shape;
+      const cp  = obj.getCenterPoint();
+
+      // 1. Dropped inside a rect — use that rect (also handles switching to a new rect)
+      let parentRect = rectContaining(cp.x, cp.y);
+
+      // 2. Outside all rects but already anchored — keep the current anchor rect
+      if (!parentRect && ann._anchorRect) {
+        parentRect = annots.find(a => a.kind === 'rect' && a.id === ann._anchorRect) || null;
+      }
+
+      if (!parentRect) {
+        ann._anchorRect = null; ann._anchorPoint = null;
+        return;
+      }
+
+      // Snap to the nearest of the 9 hotpoints on the rect
+      const hp = nearestHotpoint(obj, parentRect.shape);
+      const p  = lblPosForAnchor(parentRect.shape, hp);
+      obj.set({ left: p.x, top: p.y, originX: p.originX });
+      ann._anchorRect  = parentRect.id;
+      ann._anchorPoint = hp;
+      cv.renderAll();
+    }
+
+    // Like lblPos but accepts an explicit anchor key
+    function lblPosForAnchor(shape, anchorKey) {
+      const a = ANCHOR_MAP[anchorKey] || ANCHOR_MAP.tl;
+      const center = shape.getCenterPoint();
+      const angle  = ((shape.angle || 0) * Math.PI) / 180;
+      const W = shape.width  * (shape.scaleX || 1);
+      const H = shape.height * (shape.scaleY || 1);
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const edgeFrac = shape.angle ? 0.5 : 1;
+      const localX = a.lx * (W / 2 * edgeFrac) + a.lox;
+      const localY = a.ly * (H / 2 * edgeFrac) + a.oyFn();
+      return {
+        x: center.x + localX * cos - localY * sin,
+        y: center.y + localX * sin + localY * cos,
+        originX: a.ox,
+      };
+    }
+
+    // Glue anchored block labels to their parent rect (called on rect move/scale/rotate)
+    function glueAnchoredBlocks(rectShape) {
+      if (anchorMode !== 'anchor') return;
+      const rectAnn = annots.find(a => a.shape === rectShape);
+      if (!rectAnn) return;
+      annots.forEach(a => {
+        if (a.kind !== 'block' || a._anchorRect !== rectAnn.id || !a._anchorPoint) return;
+        const p = lblPosForAnchor(rectShape, a._anchorPoint);
+        a.shape.set({ left: p.x, top: p.y, originX: p.originX });
+      });
+    }
+
+    // Find which of the 9 anchor hotpoints a label is nearest to
+    function nearestHotpoint(lbl, shape) {
+      const center = shape.getCenterPoint();
+      const W = shape.width * (shape.scaleX || 1);
+      const H = shape.height * (shape.scaleY || 1);
+      const angle = ((shape.angle || 0) * Math.PI) / 180;
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      let best = 'tl', bestDist = Infinity;
+      Object.entries(ANCHOR_MAP).forEach(([key, a]) => {
+        const localX = a.lx * W / 2 + a.lox;
+        const localY = a.ly * H / 2;
+        const px = center.x + localX * cos - localY * sin;
+        const py = center.y + localX * sin + localY * cos;
+        const d = Math.hypot(lbl.left - px, lbl.top - py);
+        if (d < bestDist) { bestDist = d; best = key; }
+      });
+      return best;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  INLINE LABEL EDITOR
+    // ═══════════════════════════════════════════════════════
+    let editAnn = null;
+
+    function openEdit(ann, mouseEvt) {
+      editAnn = ann;
+      const inp = document.getElementById('edit-input');
+      inp.value = ann.label;
+      const popup = document.getElementById('edit-popup');
+      popup.style.left = (mouseEvt.clientX + 8) + 'px';
+      popup.style.top = (mouseEvt.clientY - 16) + 'px';
+      popup.classList.add('open');
+      inp.focus(); inp.select();
+    }
+
+    function commitEdit() {
+      if (!editAnn) return;
+      const v = document.getElementById('edit-input').value.trim();
+      if (v) {
+        editAnn.label = v;
+        // Line annotation: create or update an attached text label near the midpoint
+        if (editAnn.kind === 'line') {
+          editAnn.lineLabel = v;
+          if (editAnn.lbl) {
+            editAnn.lbl.set('text', v);
+          } else {
+            // Compute midpoint of the line
+            const s = editAnn.shape;
+            const mx = (s.x1 + s.x2) / 2 + (s.left || 0);
+            const my = (s.y1 + s.y2) / 2 + (s.top  || 0);
+            const lbl = new fabric.Text(v, {
+              left: mx + 8, top: my - fontSize / 2,
+              fontSize, fontFamily: 'DM Mono, monospace',
+              fill: editAnn.color,
+              shadow: makeShadow(),
+              padding: 12,
+              selectable: true, evented: true,
+              _kind: 'lbl', _annId: s._annId,
+            });
+            editAnn.lbl = lbl;
+            cv.add(lbl);
+          }
+        } else {
+          if (editAnn.lbl) editAnn.lbl.set('text', v);
+          if (editAnn.kind === 'text' || editAnn.kind === 'block') editAnn.shape.set('text', v);
+        }
+        cv.renderAll(); refreshList(); pushHist();
+      }
+      closeEdit();
+    }
+
+    function closeEdit() {
+      document.getElementById('edit-popup').classList.remove('open');
+      editAnn = null;
+    }
+
+    // Open label popup for a line annotation; on confirm, place a text label near the line midpoint
+    function openLineLabel(ann, mouseEvt) {
+      editAnn = ann;
+      const inp = document.getElementById('edit-input');
+      // Default to existing label text, or "Label" if none yet placed
+      inp.value = ann.lineLabel || 'Label';
+      const popup = document.getElementById('edit-popup');
+      popup.style.left = (mouseEvt.clientX + 8) + 'px';
+      popup.style.top  = (mouseEvt.clientY - 16) + 'px';
+      popup.classList.add('open');
+      inp.focus(); inp.select();
+    }
+
+    document.getElementById('edit-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+      if (e.key === 'Escape') closeEdit();
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  TOOL SWITCHING
+    // ═══════════════════════════════════════════════════════
+    function setTool(t) {
+      tool = t;
+      ['rect', 'line', 'block', 'text', 'select'].forEach(id => {
+        const el = document.getElementById('tool-' + id);
+        if (el) el.classList.toggle('active', id === t);
+      });
+      const names = { rect: 'Rectangle', line: 'Line', block: 'Block Label', text: 'Text', select: 'Select / Move' };
+      document.getElementById('st-tool').textContent = names[t] || t;
+      updateToolbarState();
+      if (!cv) return;
+      const sel = t === 'select';
+      cv.selection = sel;
+      cv.defaultCursor = sel ? 'default' : 'crosshair';
+      cv.getObjects().forEach(obj => {
+        if (obj._bg) return;
+        const alwaysSel = obj._kind === 'lbl' || obj._kind === 'text' || obj._kind === 'block' || obj.isLegend || obj.isTitle;
+        obj.selectable = sel || alwaysSel;
+        obj.evented = sel || alwaysSel;
+      });
+      if (!sel) cv.discardActiveObject();
+      cv.renderAll();
+    }
+
+    function updateToolbarState() {
+      const selObj  = cv && cv.getActiveObject();
+      const selKind = (selObj && !selObj._bg) ? selObj._kind : null;
+
+      let greyStroke, greyTextSize, greyBlock, greyAttach;
+
+      if (tool === 'select') {
+        // In select mode the selected object's kind drives everything.
+        // Nothing selected → all sections available.
+        switch (selKind) {
+          case 'line': //no text, no block area, no attach
+            greyStroke = false; greyTextSize = true;  greyBlock = true; greyAttach = true;  break;
+          case 'text': //no lines, no block area, no attach
+            greyStroke = true;  greyTextSize = false; greyBlock = true;  greyAttach = true; break;
+          case 'block': //
+            greyStroke = true;  greyTextSize = false;  greyBlock = false; greyAttach = true; break;
+          case 'rect': //everything
+          case 'lbl': //label inside rectangle?
+            greyStroke = true; greyTextSize = false; greyBlock = false; greyAttach = true; break;
+          default: // nothing selected
+            greyStroke = false; greyTextSize = false; greyBlock = false; greyAttach = false;
+        }
+      } else {
+        // Drawing-tool mode: the active tool drives the greying.
+        //   rect  → nothing greyed
+        //   line  → no text size (lines have no font), no block label
+        //   block → no stroke (IText has no stroke), no text size
+        //   text  → no stroke (IText has no stroke), no block label
+        greyStroke   = (tool === 'block') || (tool === 'text');
+        greyTextSize = (tool === 'line');
+        greyBlock    = (tool === 'line')  || (tool === 'text');
+        greyAttach   = (tool === 'block');
+      }
+
+      document.getElementById('section-linestyle').classList.toggle('greyed', greyStroke);
+      document.getElementById('section-textsize').classList.toggle('greyed', greyTextSize);
+      document.getElementById('section-blocklabel').classList.toggle('greyed', greyBlock);
+      document.getElementById('section-labelpos').classList.toggle('greyed', greyBlock);
+      document.getElementById('show-label').classList.toggle('greyed', greyAttach);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SIDEBAR SYNC
+    // ═══════════════════════════════════════════════════════
+    function syncSidebar() {
+      const obj = cv.getActiveObject();
+      if (!obj || obj._bg) return;
+      if (obj.strokeWidth) {
+        document.getElementById('stroke-w').value = obj.strokeWidth;
+        document.getElementById('sw-val').textContent = obj.strokeWidth + 'px';
+      }
+      if (obj.fontSize) {
+        document.getElementById('font-s').value = obj.fontSize;
+        document.getElementById('fs-val').textContent = obj.fontSize + 'px';
+      }
+      const c = obj.stroke || obj.fill;
+      if (c && c !== 'transparent') {
+        document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.title === c));
+        color = c;
+      }
+      // Update block label input when a block/lbl/rect annotation is selected.
+      // Text objects are free-form labels, not block labels — do not sync them.
+      if (obj._kind === 'block') {
+        const a = annots.find(a => a.shape === obj);
+        if (a && a.label) setLbl(a.label);
+      } else if (obj._kind === 'lbl') {
+        const a = annots.find(a => a.lbl === obj);
+        if (a && a.label) setLbl(a.label);
+      } else if (obj._kind === 'rect') {
+        const a = annots.find(a => a.shape === obj);
+        if (a && a.label) setLbl(a.label);
+      }
+      // Sync ann-item highlights
+      document.querySelectorAll('.ann-item').forEach(el => {
+        const elId = +el.dataset.id;
+        el.classList.toggle('sel', selectedIds.has(elId));
+      });
+      // Re-evaluate toolbar greying based on selected object kind
+      updateToolbarState();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  DELETE SELECTED  (canvas active + list selections)
+    // ═══════════════════════════════════════════════════════
+    function deleteSelected() {
+      if (!cv) return;
+
+      // Collect annot ids to remove: from sidebar selection + canvas active object
+      const toRemove = new Set(selectedIds);
+
+      const obj = cv.getActiveObject();
+      if (obj && !obj._bg) {
+        const sources = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
+        sources.forEach(o => {
+          if (o._bg) return;
+          if (o.isTitle) {
+            cv.getObjects().filter(t => t.isTitle).forEach(t => cv.remove(t));
+          } else {
+            const a = annots.find(a => a.shape === o || a.lbl === o);
+            if (a) toRemove.add(a.id);
+            else cv.remove(o); // legend or orphan
+          }
+        });
+      }
+
+      annots.filter(a => toRemove.has(a.id)).forEach(a => {
+        if (a.lbl) cv.remove(a.lbl);
+        cv.remove(a.shape);
+      });
+      annots = annots.filter(a => !toRemove.has(a.id));
+
+      selectedIds.clear();
+      cv.discardActiveObject();
+      cv.renderAll();
+      refreshList(); refreshCount(); pushHist();
+    }
+
+    function clearAll() {
+      if (!cv) return;
+      if (!confirm('Remove all annotations? The image, title, and legend will remain.')) return;
+      annots.forEach(a => {
+        if (a.lbl) cv.remove(a.lbl);
+        cv.remove(a.shape);
+      });
+      // Preserve legend and title objects — only remove annotation shapes
+      annots = []; selectedIds.clear(); annId = 0;
+      // Reset block label counter based on current specimen token
+      const _tok = getSpecToken();
+      if (_tok) {
+        if (/^\d+$/.test(_tok)) setLbl('A');
+        else if (/^[A-Za-z]+$/.test(_tok)) setLbl('1');
+        else setLbl('1');
+      } else {
+        setLbl('1');
+      }
+      saveSettings();
+      cv.discardActiveObject(); cv.renderAll();
+      refreshList(); refreshCount(); pushHist();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  ANNOTATION LIST  (multi-select with Ctrl/Shift+click)
+    // ═══════════════════════════════════════════════════════
+    const ICONS = {
+      rect:  `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18"/></svg>`,
+      line:  `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="19" x2="19" y2="5"/></svg>`,
+      block: `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>`,
+      text:  `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="11" y2="18"/></svg>`,
+    };
+
+    const DUP_ICON = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+    const DEL_ICON = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+    // Returns the display label for an annotation in the sidebar list
+    function getDispLabel(a) {
+      if (a.kind === 'line') return 'Line';
+      if (a.kind === 'rect') {
+        if (!a.lbl) return 'Rect';
+        const lbl = a.label || '';
+        if (isBlockLabel(lbl)) return `Block ${lbl}`;
+        return lbl || 'Rect';
+      }
+      if (a.kind === 'block') {
+        const txt = ((a.shape && a.shape.text) || a.label || '').trim();
+        return `Block ${txt}` || 'Block';
+      }
+      if (a.kind === 'text') {
+        const txt = ((a.shape && a.shape.text) || a.label || '').trim();
+        if (isBlockLabel(txt)) return `Block ${txt}`;
+        return txt.substring(0, 18) || 'Text';
+      }
+      return a.label || '?';
+    }
+
+    let lastClickedIdx = null;
+
+    function refreshList(scrollEnd) {
+      const list = document.getElementById('annot-list');
+      list.innerHTML = '';
+      annots.forEach((a, idx) => {
+        const el = document.createElement('div');
+        el.className = 'ann-item' + (selectedIds.has(a.id) ? ' sel' : '');
+        el.dataset.id = a.id;
+        el.dataset.idx = idx;
+        const dc = a.color === '#000000' ? '#888' : a.color;
+        const dispLbl = getDispLabel(a);
+
+        el.innerHTML = `<div class="ann-dot" style="background:${dc}"></div>
+      <span style="opacity:.5;line-height:1">${ICONS[a.kind] || ''}</span>
+      <span>${dispLbl}</span>
+      <div class="ann-item-actions">
+        <button class="ann-dup" title="Duplicate">${DUP_ICON}</button>
+        <button class="ann-del" title="Delete">${DEL_ICON}</button>
+      </div>`;
+
+        el.addEventListener('click', ev => {
+          if (ev.target.closest('.ann-dup')) {
+            duplicateAnnotationFromList(a);
+            return;
+          }
+          if (ev.target.closest('.ann-del')) {
+            if (a.lbl) cv.remove(a.lbl);
+            cv.remove(a.shape);
+            annots = annots.filter(x => x !== a);
+            selectedIds.delete(a.id);
+            refreshList(); refreshCount(); cv.renderAll(); pushHist();
+            return;
+          }
+
+          if (ev.ctrlKey || ev.metaKey) {
+            if (selectedIds.has(a.id)) selectedIds.delete(a.id);
+            else selectedIds.add(a.id);
+            lastClickedIdx = idx;
+          } else if (ev.shiftKey && lastClickedIdx !== null) {
+            const lo = Math.min(lastClickedIdx, idx), hi = Math.max(lastClickedIdx, idx);
+            for (let i = lo; i <= hi; i++) selectedIds.add(annots[i].id);
+            lastClickedIdx = idx;
+          } else {
+            selectedIds.clear();
+            selectedIds.add(a.id);
+            lastClickedIdx = idx;
+            if (cv) { setTool('select'); cv.setActiveObject(a.shape); cv.renderAll(); }
+          }
+          refreshList();
+        });
+
+        list.appendChild(el);
+      });
+      refreshLabelKey(scrollEnd);
+      if (scrollEnd) scrollToEnd('annot-list');
+    }
+
+    // Duplicate an annotation from the sidebar list, offset slightly from original
+    function duplicateAnnotationFromList(ann) {
+      if (!cv) return;
+      const offset = 18;
+      ann.shape.clone(cloned => {
+        cloned._annId = ++annId;
+        const cp = ann.shape.getCenterPoint();
+        cloned.setPositionByOrigin(new fabric.Point(cp.x + offset, cp.y + offset), 'center', 'center');
+        cloned.set({ selectable: true, evented: true, angle: ann.shape.angle || 0 });
+        addCopyControls(cloned);
+        cv.add(cloned);
+        let usedLbl, lblObj = null;
+        const showLabel = document.getElementById('show-label').checked;
+        if (ann.kind === 'text') {
+          // Preserve exact text; do not increment
+          usedLbl = ann.label;
+          // text is already cloned correctly
+        } else {
+          usedLbl = getLbl();
+          if (ann.kind === 'rect' && showLabel && !ann.noBlock) {
+            lblObj = makeLblText(usedLbl, cloned);
+            cv.add(lblObj);
+          }
+          if (ann.kind === 'block') cloned.set('text', usedLbl);
+        }
+        annots.push({ id: cloned._annId, shape: cloned, lbl: lblObj,
+          color: ann.color, label: usedLbl, kind: ann.kind, notes: '', noBlock: ann.noBlock });
+        if (ann.kind !== 'line' && ann.kind !== 'text' && !ann.noBlock) autoInc(usedLbl);
+        cv.setActiveObject(cloned);
+        refreshList(); refreshCount(); pushHist(); cv.renderAll();
+      }, JSON_PROPS);
+    }
+
+    function refreshCount() {
+      document.getElementById('st-count').textContent = annots.length;
+    }
+
+    function scrollToEnd(id) {
+      const el = document.getElementById(id);
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  LABEL KEY
+    // ═══════════════════════════════════════════════════════
+    // Returns the first whitespace-delimited token from the Specimen field.
+    // e.g. "1 Left Thyroid" → "1",  "A Prostate" → "A"
+    function getSpecToken() {
+      return (specimenText || '').trim().split(/\s+/)[0] || '';
+    }
+
+    // Format a single block label with the specimen prefix.
+    // Numeric spec + alpha labels  → "1A-" / "1D-1E"
+    // Alpha spec   + numeric labels → "A1-" / "A4-5"
+    // No spec: fallback to label + "-" for singles, label as-is for ranges
+    function formatBlockLabel(label, tok) {
+      const tokIsNum  = /^\d+$/.test(tok);
+      const alphaRange = label.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      const numRange   = label.match(/^(\d+)-(\d+)$/);
+
+      if (!tok) {
+        // No spec token: just append dash for single labels
+        return (alphaRange || numRange) ? label : label + '-';
+      }
+
+      if (tokIsNum) {
+        // Spec is numeric (e.g. "1"), blocks expected to be alpha
+        if (alphaRange) return `${tok}${alphaRange[1]}-${tok}${alphaRange[2]}`;   // "1D-1E"
+        if (/^[A-Za-z]+$/.test(label)) return `${tok}${label}-`;                  // "1A-"
+        if (numRange) return `${tok}-${numRange[1]}-${numRange[2]}`;              // "1-3-4" (edge case)
+        return `${tok}${label}-`;
+      } else {
+        // Spec is alpha (e.g. "A"), blocks expected to be numeric
+        if (numRange) return `${tok}${numRange[1]}-${numRange[2]}`;   // "A4-5"
+        if (/^\d+$/.test(label)) return `${tok}${label}-`;            // "A1-"
+        if (alphaRange) return `${tok}${alphaRange[1]}-${tok}${alphaRange[2]}`; // edge case
+        return `${tok}${label}-`;
+      }
+    }
+
+    // Returns the numeric sort key for a block annotation based on its label's
+    // start value, so the Block Key list always stays in alphabetical/numeric order.
+    function blockSortKey(a) {
+      const label = (a.kind === 'text' || a.kind === 'block')
+        ? ((a.shape && a.shape.text) || a.label || '').trim()
+        : (a.label || '').trim();
+      const alphaRange = label.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      const numRange   = label.match(/^(\d+)-(\d+)$/);
+      if (alphaRange) return alphaVal(alphaRange[1].toUpperCase());
+      if (numRange)   return +numRange[1];
+      if (/^[A-Za-z]+$/.test(label)) return alphaVal(label.toUpperCase());
+      if (/^\d+$/.test(label))       return +label;
+      return Infinity; // unknown format — sort to end
+    }
+
+    // Returns block annotations (rect with lbl + valid block label, block kind, or legacy text with valid block label).
+    // Always sorted alphabetically / numerically by label start value so the Block Key stays ordered.
+    function getBlockAnnotations() {
+      return annots.filter(a => {
+        if (a.noBlock) return false;
+        if (a.kind === 'rect' && a.lbl) {
+          return isBlockLabel(a.label);
+        }
+        if (a.kind === 'block') {
+          const txt = ((a.shape && a.shape.text) || a.label || '').trim();
+          return isBlockLabel(txt);
+        }
+        // Backwards compatibility: old sessions may have kind='text' with block labels
+        if (a.kind === 'text') {
+          const txt = ((a.shape && a.shape.text) || a.label || '').trim();
+          return isBlockLabel(txt);
+        }
+        return false;
+      }).sort((a, b) => blockSortKey(a) - blockSortKey(b));
+    }
+
+    // Expand an internal block label into an array of all individual values it covers.
+    // e.g. "B-D" → ["B","C","D"], "1-4" → ["1","2","3","4"], "E" → ["E"]
+    function expandBlockLabel(label) {
+      const alphaRange = label.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      const numRange   = label.match(/^(\d+)-(\d+)$/);
+      if (alphaRange) {
+        const start = alphaVal(alphaRange[1].toUpperCase());
+        const end   = alphaVal(alphaRange[2].toUpperCase());
+        const result = [];
+        for (let i = start; i <= end; i++) result.push(alphaFromVal(i, true));
+        return result;
+      }
+      if (numRange) {
+        const result = [];
+        for (let i = +numRange[1]; i <= +numRange[2]; i++) result.push(String(i));
+        return result;
+      }
+      if (/^[A-Za-z]+$/.test(label)) return [label.toUpperCase()];
+      if (/^\d+$/.test(label))       return [label];
+      return [];
+    }
+
+    // Returns a Map<annId, { duplicate, gap, tooltip }> for entries that have QA issues:
+    //   duplicate — a value this entry covers is also covered by at least one other entry.
+    //   gap       — a value this entry covers has a predecessor that is absent from the
+    //               entire block set (implying a missing block in the sequence).
+    function computeBlockKeyWarnings() {
+      const blocks = getBlockAnnotations();
+      if (blocks.length < 2) return new Map();
+
+      const entries = blocks.map(a => ({
+        id: a.id,
+        label: (a.kind === 'text' || a.kind === 'block')
+          ? ((a.shape && a.shape.text) || a.label || '').trim()
+          : (a.label || '').trim(),
+      }));
+
+      // Count how many entries cover each individual value
+      const valueCoverage = new Map();
+      entries.forEach(e => {
+        expandBlockLabel(e.label).forEach(v => {
+          valueCoverage.set(v, (valueCoverage.get(v) || 0) + 1);
+        });
+      });
+      if (!valueCoverage.size) return new Map();
+
+      const allValues = [...valueCoverage.keys()];
+      const isAlpha = /^[A-Za-z]+$/.test(allValues[0]);
+
+      // Build expected full set from 1/A up to the highest value found
+      let expectedSet;
+      if (isAlpha) {
+        const maxIdx = Math.max(...allValues.map(v => alphaVal(v)));
+        expectedSet = [];
+        for (let i = 1; i <= maxIdx; i++) expectedSet.push(alphaFromVal(i, true));
+      } else {
+        const maxNum = Math.max(...allValues.map(Number));
+        expectedSet = [];
+        for (let i = 1; i <= maxNum; i++) expectedSet.push(String(i));
+      }
+      const missingValues = new Set(expectedSet.filter(v => !valueCoverage.has(v)));
+
+      const warnings = new Map();
+      entries.forEach(e => {
+        const vals = expandBlockLabel(e.label);
+        const hasDuplicate = vals.some(v => (valueCoverage.get(v) || 0) > 1);
+        const hasGap = vals.some(v => {
+          const prev = isAlpha ? prevAlpha(v) : String(+v - 1);
+          const prevIdx = isAlpha ? alphaVal(prev) : +prev;
+          return prevIdx >= 1 && missingValues.has(prev);
+        });
+        if (hasDuplicate || hasGap) {
+          const parts = [];
+          if (hasDuplicate) parts.push('Duplicate: value already covered by another entry');
+          if (hasGap) parts.push('Gap: a preceding value is missing from the sequence');
+          warnings.set(e.id, { duplicate: hasDuplicate, gap: hasGap, tooltip: parts.join(' · ') });
+        }
+      });
+      return warnings;
+    }
+
+    function refreshLabelKey(scrollEnd) {
+      const tok = getSpecToken();
+      const container = document.getElementById('label-key');
+      container.innerHTML = '';
+      const blocks = getBlockAnnotations();
+      if (!blocks.length) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'font-family:DM Mono,monospace;font-size:10px;color:var(--muted);padding:3px 2px';
+        empty.textContent = '—';
+        container.appendChild(empty);
+        return;
+      }
+      const warnings = computeBlockKeyWarnings();
+      blocks.forEach(a => {
+        const lbl = (a.kind === 'text' || a.kind === 'block')
+          ? formatBlockLabel((a.shape && a.shape.text) || a.label, tok)
+          : formatBlockLabel(a.label, tok);
+        const row = document.createElement('div');
+        row.className = 'key-entry';
+        const w = warnings.get(a.id);
+        if (w) {
+          const icon = document.createElement('span');
+          icon.className = 'key-warn';
+          icon.textContent = '⚠';
+          icon.title = w.tooltip;
+          row.appendChild(icon);
+        }
+        const span = document.createElement('span');
+        span.className = 'key-entry-lbl';
+        span.textContent = lbl;
+        const inp = document.createElement('input');
+        inp.className = 'key-entry-notes';
+        inp.type = 'text';
+        inp.value = a.notes || '';
+        inp.placeholder = 'notes…';
+        inp.addEventListener('input', e => { a.notes = e.target.value; });
+        row.appendChild(span);
+        row.appendChild(inp);
+        container.appendChild(row);
+      });
+      if (scrollEnd) scrollToEnd('label-key');
+    }
+
+    function copyLabelKey() {
+      const tok = getSpecToken();
+      const blocks = getBlockAnnotations();
+      if (!blocks.length) return;
+      const lines = blocks.map(a => {
+        const lbl = (a.kind === 'text' || a.kind === 'block')
+          ? formatBlockLabel((a.shape && a.shape.text) || a.label, tok)
+          : formatBlockLabel(a.label, tok);
+        if (!a.notes) return lbl;
+        return lbl.endsWith('-') ? `${lbl}${a.notes}` : `${lbl} ${a.notes}`;
+      });
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        const btn = document.getElementById('key-copy-btn');
+        const orig = btn.innerHTML;
+        btn.textContent = '✓ Copied';
+        setTimeout(() => { btn.innerHTML = orig; }, 1400);
+      }).catch(() => {});
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  UNDO / REDO
+    // ═══════════════════════════════════════════════════════
+    const JSON_PROPS = ['_bg', '_kind', '_annId', 'isLegend', 'isTitle'];
+
+    // Return canvas JSON with the background image object stripped out.
+    // The bg is always recreated from imgDataURL on load, so embedding
+    // the base64 src would make exported files enormous.
+    function getCanvasJSON() {
+      const j = cv.toJSON(JSON_PROPS);
+      j.objects = j.objects.filter(o => !o._bg);
+      return j;
+    }
+
+    function snapMeta() {
+      return annots.map(a => ({ id: a.id, color: a.color, label: a.label, kind: a.kind, notes: a.notes || '' }));
+    }
+
+    function pushHist() {
+      if (histLock || !cv) return;
+      undoStack.push({
+        json: cv.toJSON(JSON_PROPS),  // keep bg in undo history (stays in-memory)
+        meta: snapMeta(),
+        lbl: getLbl(),
+        annId,
+      });
+      if (undoStack.length > 80) undoStack.shift();
+      redoStack = [];
+      syncHistBtns();
+      autoSave();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  LOCAL STORAGE AUTO-SAVE
+    // ═══════════════════════════════════════════════════════
+    const LS_KEY = 'pathannotate_v5';
+
+    function autoSave() {
+      if (!cv || histLock) return;
+      try {
+        const session = {
+          v: 5, imageName: document.getElementById('file-name').textContent,
+          canvasJSON: getCanvasJSON(),   // bg stripped — use imgDataURL separately
+          canvasWidth: cv.width, canvasHeight: cv.height,
+          meta: snapMeta(), lbl: getLbl(), annId,
+          titleText: getTitleText() || null,
+          caseNumber: caseNum, specimen: specimenText,
+        };
+        localStorage.setItem(LS_KEY, JSON.stringify(session));
+      } catch (e) { /* quota exceeded — silently ignore */ }
+    }
+
+    function doUndo() {
+      if (undoStack.length <= 1) return;
+      redoStack.push(undoStack.pop());
+      applySnap(undoStack[undoStack.length - 1]);
+    }
+
+    function doRedo() {
+      if (!redoStack.length) return;
+      const s = redoStack.pop();
+      undoStack.push(s);
+      applySnap(s);
+    }
+
+    function applySnap(snap) {
+      histLock = true;
+      cv.loadFromJSON(snap.json, () => {
+        cv.renderAll();
+        // Re-lock bg objects and re-attach copy controls to annotations
+        cv.getObjects().forEach(obj => {
+          if (obj._bg) lockBg(obj);
+          else addCopyControls(obj);
+        });
+
+        // Rebuild annots references
+        const byId = {}, lblById = {};
+        cv.getObjects().forEach(obj => {
+          if (obj._kind === 'rect' || obj._kind === 'line' || obj._kind === 'text' || obj._kind === 'block') byId[obj._annId] = obj;
+          if (obj._kind === 'lbl') lblById[obj._annId] = obj;
+        });
+        annots = snap.meta.map(m => ({
+          id: m.id, color: m.color, label: m.label, kind: m.kind,
+          notes: m.notes || '',
+          shape: byId[m.id] || null, lbl: lblById[m.id] || null,
+        })).filter(a => a.shape);
+
+        annId = snap.annId;
+        setLbl(snap.lbl);
+        selectedIds.clear();
+        refreshList(); refreshCount();
+        histLock = false;
+        syncHistBtns();
+        setTool(tool);
+      });
+    }
+
+    function syncHistBtns() {
+      document.getElementById('undo-btn').disabled = undoStack.length <= 1;
+      document.getElementById('redo-btn').disabled = redoStack.length === 0;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  ORIENTATION LEGEND MODAL
+    // ═══════════════════════════════════════════════════════
+    (function buildPresets() {
+      const chips = document.getElementById('preset-chips');
+      LEGEND_PRESETS.forEach(p => {
+        const el = document.createElement('div');
+        el.className = 'preset-chip';
+        el.innerHTML = `<div class="chip-main">${p.label}</div><div class="chip-sub">${p.sub}</div>`;
+        el.onclick = () => {
+          document.getElementById('leg-s').value = p.s;
+          document.getElementById('leg-i').value = p.i;
+          document.getElementById('leg-l').value = p.l;
+          document.getElementById('leg-r').value = p.r;
+          document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('applied'));
+          el.classList.add('applied');
+          refreshPreview();
+        };
+        chips.appendChild(el);
+      });
+    })();
+
+    function openLegend() { refreshPreview(); document.getElementById('legend-modal').classList.add('open'); }
+    function closeLegend() { document.getElementById('legend-modal').classList.remove('open'); }
+    document.getElementById('legend-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeLegend(); });
+
+    function refreshPreview() {
+      const s = document.getElementById('leg-s').value;
+      const i = document.getElementById('leg-i').value;
+      const l = document.getElementById('leg-l').value;
+      const r = document.getElementById('leg-r').value;
+      document.getElementById('leg-preview').innerHTML =
+        `<div>${s || '—'}</div><div class="ctr"><span class="leg-left">${l || '—'}</span><span>+</span><span class="leg-right">${r || '—'}</span></div><div>${i || '—'}</div>`;
+    }
+
+    function insertLegend() {
+      if (!cv) { closeLegend(); return; }
+      const sup = document.getElementById('leg-s').value.trim();
+      const inf = document.getElementById('leg-i').value.trim();
+      const left = document.getElementById('leg-l').value.trim();
+      const right = document.getElementById('leg-r').value.trim();
+      const pos = document.getElementById('leg-pos').value;
+      const col = document.getElementById('leg-col').value;
+
+      const fz = 13, lh = 20, pad = 10;
+      const hasMid = left || right;
+      const rowCount = (sup ? 1 : 0) + (hasMid ? 1 : 0) + (inf ? 1 : 0);
+      const bw = 190, bh = rowCount * lh + pad * 2;
+      const cW = cv.width, cH = cv.height;
+      const corners = { br: [cW - bw - 10, cH - bh - 10], bl: [10, cH - bh - 10], tr: [cW - bw - 10, 10], tl: [10, 10] };
+      const [bx, by] = corners[pos] || corners.br;
+
+      const baseProps = {
+        fontSize: fz, fontFamily: 'DM Mono,monospace', fill: col,
+        selectable: true, evented: true, isLegend: true,
+      };
+
+      // Background box
+      cv.add(new fabric.Rect({
+        left: bx, top: by, width: bw, height: bh,
+        fill: 'rgba(0,0,0,0.6)', rx: 5, ry: 5,
+        selectable: true, evented: true, isLegend: true,
+      }));
+
+      let ty = by + pad;
+
+      if (sup) {
+        cv.add(new fabric.IText(sup, { ...baseProps, left: bx + bw / 2, top: ty, originX: 'center' }));
+        ty += lh;
+      }
+
+      if (hasMid) {
+        // Left word — left-aligned from box left edge
+        if (left) cv.add(new fabric.IText(left, { ...baseProps, left: bx + pad, top: ty, originX: 'left' }));
+        // Plus — always centered in the box
+        cv.add(new fabric.IText('+', { ...baseProps, left: bx + bw / 2, top: ty, originX: 'center' }));
+        // Right word — right-aligned from box right edge
+        if (right) cv.add(new fabric.IText(right, { ...baseProps, left: bx + bw - pad, top: ty, originX: 'right' }));
+        ty += lh;
+      }
+
+      if (inf) {
+        cv.add(new fabric.IText(inf, { ...baseProps, left: bx + bw / 2, top: ty, originX: 'center' }));
+      }
+
+      cv.renderAll(); pushHist(); closeLegend();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  CLIPBOARD  (Ctrl+C / Ctrl+V)
+    // ═══════════════════════════════════════════════════════
+    function copyToClipboard() {
+      if (!cv) return;
+      const obj = cv.getActiveObject();
+      if (!obj) return;
+      const sources = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
+      const valid = sources
+        .filter(o => !o._bg && (o._kind === 'rect' || o._kind === 'line' || o._kind === 'text' || o._kind === 'block'))
+        .map(o => annots.find(a => a.shape === o))
+        .filter(Boolean);
+      if (!valid.length) return;
+      // Compute centroid so relative positions are preserved on multi-paste
+      let cx = 0, cy = 0;
+      valid.forEach(a => { const p = a.shape.getCenterPoint(); cx += p.x; cy += p.y; });
+      cx /= valid.length; cy /= valid.length;
+      clipboard = valid.map(a => ({
+        ann: a,
+        relX: a.shape.getCenterPoint().x - cx,
+        relY: a.shape.getCenterPoint().y - cy,
+      }));
+    }
+
+    function pasteFromClipboard() {
+      if (!cv || !clipboard.length) return;
+      // Paste centroid at cursor position, or fall back to 10px right of original
+      let pasteX, pasteY;
+      if (lastMousePos) {
+        pasteX = lastMousePos.x; pasteY = lastMousePos.y;
+      } else {
+        pasteX = clipboard[0].ann.shape.getCenterPoint().x + 10;
+        pasteY = clipboard[0].ann.shape.getCenterPoint().y;
+      }
+      let pasted = 0;
+      clipboard.forEach(({ ann, relX, relY }) => {
+        ann.shape.clone(cloned => {
+          cloned._annId = ++annId;
+          cloned.setPositionByOrigin(
+            new fabric.Point(pasteX + relX, pasteY + relY), 'center', 'center');
+          cloned.set({ selectable: true, evented: true, angle: ann.shape.angle || 0 });
+          addCopyControls(cloned);
+          cv.add(cloned);
+          let usedLbl, lblObj = null;
+          const showLabel = document.getElementById('show-label').checked;
+          if (ann.kind === 'text') {
+            // Preserve exact text; do not increment
+            usedLbl = ann.label;
+          } else {
+            usedLbl = getLbl();
+            if (ann.kind === 'rect' && showLabel && !ann.noBlock) {
+              lblObj = makeLblText(usedLbl, cloned);
+              cv.add(lblObj);
+            }
+            if (ann.kind === 'block') cloned.set('text', usedLbl);
+          }
+          annots.push({ id: cloned._annId, shape: cloned, lbl: lblObj,
+            color: ann.color, label: usedLbl, kind: ann.kind, notes: '', noBlock: ann.noBlock });
+          if (ann.kind !== 'line' && ann.kind !== 'text' && !ann.noBlock) autoInc(usedLbl);
+          pasted++;
+          if (pasted === clipboard.length) { refreshList(); refreshCount(); pushHist(); cv.renderAll(); }
+        }, JSON_PROPS);
+      });
+    }
+
+    // Paste a copy of ann centered at canvas coordinates (x, y)
+    function pasteAnnotationAt(ann, x, y) {
+      if (!cv) return;
+      ann.shape.clone(cloned => {
+        cloned._annId = ++annId;
+        cloned.setPositionByOrigin(new fabric.Point(x, y), 'center', 'center');
+        cloned.set({ selectable: true, evented: true, angle: ann.shape.angle || 0 });
+        addCopyControls(cloned);
+        cv.add(cloned);
+        let usedLbl, lblObj = null;
+        const showLabel = document.getElementById('show-label').checked;
+        if (ann.kind === 'text') {
+          // Preserve exact text; do not increment
+          usedLbl = ann.label;
+        } else {
+          usedLbl = getLbl();
+          if (ann.kind === 'rect' && showLabel && !ann.noBlock) {
+            lblObj = makeLblText(usedLbl, cloned);
+            cv.add(lblObj);
+          }
+          if (ann.kind === 'block') cloned.set('text', usedLbl);
+        }
+        annots.push({ id: cloned._annId, shape: cloned, lbl: lblObj,
+          color: ann.color, label: usedLbl, kind: ann.kind, notes: '', noBlock: ann.noBlock });
+        if (ann.kind !== 'line' && ann.kind !== 'text' && !ann.noBlock) autoInc(usedLbl);
+        cv.setActiveObject(cloned);
+        refreshList(); refreshCount(); pushHist(); cv.renderAll();
+      }, JSON_PROPS);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SPECIMEN TITLE
+    // ═══════════════════════════════════════════════════════
+
+    // Returns the combined "CaseNum-Specimen" string shown on canvas / used for filename
+    function getTitleText() {
+      const cn = caseNum.trim(), sp = specimenText.trim();
+      if (cn && sp) return `${cn}-${sp}`;
+      return cn || sp || null;
+    }
+
+    function openTitle() {
+      document.getElementById('case-num-input').value = caseNum;
+      document.getElementById('specimen-input').value = specimenText;
+      document.getElementById('title-modal').classList.add('open');
+      document.getElementById('case-num-input').focus();
+    }
+    function closeTitle() { document.getElementById('title-modal').classList.remove('open'); }
+
+    document.getElementById('title-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeTitle(); });
+    document.getElementById('privacy-modal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) document.getElementById('privacy-modal').classList.remove('open');
+    });
+    document.getElementById('changelog-modal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) document.getElementById('changelog-modal').classList.remove('open');
+    });
+    // Allow Enter to advance from Case Number to Specimen, then Apply
+    document.getElementById('case-num-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('specimen-input').focus(); }
+      if (e.key === 'Escape') closeTitle();
+    });
+    document.getElementById('specimen-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); applyTitle(); }
+      if (e.key === 'Escape') closeTitle();
+    });
+
+    function applyTitle() {
+      caseNum      = document.getElementById('case-num-input').value.trim();
+      specimenText = document.getElementById('specimen-input').value.trim();
+      closeTitle();
+
+      // Auto-seed block label based on specimen token type:
+      //   numeric token (e.g. "2" from "2 Left Kidney")  → alpha labels: A, B, C…
+      //   alpha token   (e.g. "B" from "B Kidney")        → numeric labels: 1, 2, 3…
+      const _tok = getSpecToken();
+      if (_tok) {
+        if (/^\d+$/.test(_tok)) setLbl('A');
+        else if (/^[A-Za-z]+$/.test(_tok)) setLbl('1');
+        saveSettings();
+      }
+
+      if (!cv) return;
+
+      // Remove existing title objects
+      cv.getObjects().filter(o => o.isTitle).forEach(o => cv.remove(o));
+
+      const text = getTitleText();
+      if (!text) { cv.renderAll(); pushHist(); refreshLabelKey(); return; }
+
+      const fz = 14, pad = 8;
+      const bw = Math.max(text.length * 9 + pad * 2, 160);
+      const bh = fz + pad * 2;
+      const bx = 10, by = 10;
+
+      cv.add(new fabric.Rect({
+        left: bx, top: by, width: bw, height: bh,
+        fill: 'rgba(0,0,0,0.65)', rx: 4, ry: 4,
+        selectable: true, evented: true, isTitle: true,
+      }));
+      const itxt = new fabric.IText(text, {
+        left: bx + pad, top: by + pad,
+        fontSize: fz, fontFamily: 'DM Mono, monospace',
+        fill: '#ffffff',
+        shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.6)', blur: 3, offsetX: 1, offsetY: 1 }),
+        selectable: true, evented: true, isTitle: true,
+      });
+      cv.add(itxt);
+      itxt.on('editing:exited', () => pushHist());
+
+      cv.renderAll(); pushHist(); refreshLabelKey();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  SAVE / LOAD SESSION
+    // ═══════════════════════════════════════════════════════
+    function saveSession() {
+      if (!cv) { alert('Nothing to save.'); return; }
+      cv.discardActiveObject(); cv.renderAll();
+      const title = getTitleText();
+      const session = {
+        v: 5, imageName: document.getElementById('file-name').textContent,
+        // imageDataURL intentionally omitted — export image separately with Export Photo.
+        // Background image src is also stripped from canvasJSON to keep file size small.
+        // On load the bg is recreated from the current image or a placeholder.
+        canvasJSON: getCanvasJSON(),
+        canvasWidth: cv.width, canvasHeight: cv.height,
+        meta: snapMeta(),
+        lbl: getLbl(), annId,
+        titleText: title || null,
+        caseNumber: caseNum, specimen: specimenText,
+      };
+      const fname = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'pathannotate-session') + '.json';
+      const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = fname; a.click();
+    }
+
+    function makePlaceholderDataURL(w, h) {
+      const c = document.createElement('canvas');
+      c.width = w || 800; c.height = h || 600;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#1a1a1c';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.strokeStyle = '#2a2a2e';
+      ctx.lineWidth = 1;
+      const step = 40;
+      for (let x = 0; x <= c.width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, c.height); ctx.stroke(); }
+      for (let y = 0; y <= c.height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(c.width, y); ctx.stroke(); }
+      ctx.fillStyle = '#2a2a2e';
+      ctx.font = '14px DM Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('No image loaded — mapping only', c.width / 2, c.height / 2);
+      return c.toDataURL('image/png');
+    }
+
+    function applySessionObject(s) {
+      // Determine image: v4 sessions embed it; v5+ do not.
+      // Fall back to whatever image is already loaded, then to a placeholder.
+      let useDataURL = s.imageDataURL || imgDataURL;
+      if (!useDataURL) {
+        const cj = s.canvasJSON || {};
+        useDataURL = makePlaceholderDataURL(s.canvasWidth || cj.width || 800, s.canvasHeight || cj.height || 600);
+      }
+      imgDataURL = useDataURL;
+      document.getElementById('drop-zone').style.display = 'none';
+      document.getElementById('canvas-wrapper').style.display = 'block';
+      initCanvas(useDataURL, s.imageName || 'mapping', () => {
+        histLock = true;
+        cv.loadFromJSON(s.canvasJSON, () => {
+          // After loadFromJSON the background image may be absent (stripped from saved JSON).
+          // Re-add it from useDataURL so the canvas always has a background.
+          const finishLoad = () => {
+            cv.renderAll();
+            cv.getObjects().forEach(obj => {
+              if (obj._bg) lockBg(obj);
+              else addCopyControls(obj);
+            });
+            const byId = {}, lblById = {};
+            cv.getObjects().forEach(obj => {
+              if (obj._kind === 'rect' || obj._kind === 'line' || obj._kind === 'text' || obj._kind === 'block') byId[obj._annId] = obj;
+              if (obj._kind === 'lbl') lblById[obj._annId] = obj;
+            });
+            annots = s.meta.map(m => ({ id: m.id, color: m.color, label: m.label, kind: m.kind,
+              notes: m.notes || '',
+              shape: byId[m.id] || null, lbl: lblById[m.id] || null })).filter(a => a.shape);
+            annId = s.annId; setLbl(s.lbl);
+            if (s.caseNumber !== undefined) caseNum = s.caseNumber;
+            if (s.specimen   !== undefined) specimenText = s.specimen;
+            selectedIds.clear();
+            refreshList(); refreshCount(); histLock = false;
+            pushHist(); syncHistBtns(); setTool(tool);
+          };
+          const hasBg = cv.getObjects().some(o => o._bg);
+          if (!hasBg) {
+            fabric.Image.fromURL(useDataURL, fImg => {
+              fImg.scaleToWidth(cv.width); fImg.scaleToHeight(cv.height);
+              lockBg(fImg);
+              cv.add(fImg);
+              cv.sendToBack(fImg);
+              finishLoad();
+            });
+          } else {
+            finishLoad();
+          }
+        });
+      });
+    }
+
+    function readSession(file) {
+      const r = new FileReader();
+      r.onload = ev => {
+        let s; try { s = JSON.parse(ev.target.result); } catch { alert('Invalid session file.'); return; }
+        applySessionObject(s);
+      };
+      r.readAsText(file);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  EXPORT — full-resolution JPEG
+    // ═══════════════════════════════════════════════════════
+    /*
+      The blur issue is caused by exporting at the displayed (scaled-down) canvas
+      resolution. Fix: export at the ORIGINAL image resolution using a multiplier.
+    */
+    function exportImg() {
+      if (!cv) return;
+      cv.discardActiveObject(); cv.renderAll();
+
+      // Determine original image dimensions from the stored dataURL
+      const img = new Image();
+      img.onload = () => {
+        const scaleX = img.width / cv.width;
+        const scaleY = img.height / cv.height;
+        const mult = Math.max(scaleX, scaleY, 1); // at minimum 1×
+        const dataURL = cv.toDataURL({ format: 'jpeg', quality: 0.96, multiplier: mult });
+        const title = getTitleText();
+        const fname = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.jpg';
+        const a = document.createElement('a');
+        a.href = dataURL; a.download = fname; a.click();
+      };
+      img.src = imgDataURL || '';
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  KEYBOARD
+    // ═══════════════════════════════════════════════════════
+    document.addEventListener('keyup', e => { if (e.key === 'Shift') shiftHeld = false; });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Shift') shiftHeld = true;
+      const tag = document.activeElement.tagName;
+      const inInput = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable;
+      // Consider Fabric.js IText editing as "in input" so Backspace/Ctrl+C etc.
+      // operate on the text being edited rather than on annotations.
+      const iTextEditing = cv && cv.getActiveObject() && cv.getActiveObject().isEditing;
+
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); doRedo(); return; }
+
+      // Ctrl+C / Ctrl+V — skip if inside a text input or IText edit
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !inInput && !iTextEditing) { copyToClipboard(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !inInput && !iTextEditing) { e.preventDefault(); pasteFromClipboard(); return; }
+
+      if (inInput) return;
+      if (e.key === 'Escape') { closeEdit(); closeLegend(); document.getElementById('privacy-modal').classList.remove('open'); document.getElementById('changelog-modal').classList.remove('open'); if (cv) { cv.discardActiveObject(); cv.renderAll(); } selectedIds.clear(); refreshList(); return; }
+      if (e.key.toLowerCase() === 'r') setTool('rect');
+      if (e.key.toLowerCase() === 'e') setTool('line');
+      if (e.key.toLowerCase() === 'b') setTool('block');
+      if (e.key.toLowerCase() === 't') setTool('text');
+      if (e.key.toLowerCase() === 's') setTool('select');
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !iTextEditing) deleteSelected();
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  AUTO-RESTORE on page load (from localStorage + IDB)
+    // ═══════════════════════════════════════════════════════
+    (async function () {
+      // Restore UI settings (theme, color, sliders) before anything else
+      loadSettings();
+
+      // Load saved photo from IndexedDB first
+      const savedPhoto = await loadPhotoFromIDB();
+      if (savedPhoto) imgDataURL = savedPhoto;
+
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) {
+          // No session data — just show the photo if we have one
+          if (savedPhoto) initCanvas(savedPhoto, '');
+          return;
+        }
+        const s = JSON.parse(raw);
+        if (s && s.canvasJSON) applySessionObject(s);
+      } catch (e) { /* corrupt data — ignore */ }
+    })();
+  </script>
+</body>
+
+</html>
