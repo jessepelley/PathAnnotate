@@ -45,7 +45,7 @@
     "url": "https://pathannotate.app",
     "applicationCategory": "MedicalApplication",
     "operatingSystem": "Web",
-    "softwareVersion": "1.2.0",
+    "softwareVersion": "1.3.0",
     "description": "PathAnnotate is a lightweight web app for annotating gross pathology specimens. Draw rectangles, lines, and block labels, save sessions, and export annotated images.",
     "offers": {
       "@type": "Offer",
@@ -62,7 +62,7 @@
   </script>
 
 </head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fabric@7/dist/index.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
 
@@ -1578,6 +1578,10 @@
            style="color:var(--accent);text-decoration:none">github.com/PathAnnotate/PathAnnotate</a>
       </p>
       <div style="font-family:'DM Mono',monospace;font-size:11px;line-height:1.7">
+        <div style="color:var(--accent);margin-bottom:4px">v1.3.0</div>
+        <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
+          <li>Upgraded to Fabric.js v7 (async API, renamed classes, origin defaults)</li>
+        </ul>
         <div style="color:var(--accent);margin-bottom:4px">v1.2.0</div>
         <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
           <li>Added ⚠ warning to 'Block Key' for detected missing or duplicate blocks</li>
@@ -1614,9 +1618,14 @@
     // ═══════════════════════════════════════════════════════
     //  VERSION
     // ═══════════════════════════════════════════════════════
-    const VERSION = '1.2.0';
+    const VERSION = '1.3.0';
     document.getElementById('logo-ver').textContent = 'v' + VERSION;
     document.getElementById('ver-stat').textContent = 'PathAnnotate v' + VERSION;
+
+    // Fabric.js v7 renamed some classes; keep aliases so both v5-saved sessions and
+    // new objects work regardless of the exact UMD export shape.
+    const FabricObject = fabric.FabricObject || fabric.Object;
+    const FabricImage  = fabric.FabricImage  || fabric.Image;
 
     // ═══════════════════════════════════════════════════════
     //  CONFIG
@@ -2073,7 +2082,7 @@
         tmp.src = dataURL;
       }
       cv.getObjects().filter(o => o._bg).forEach(o => cv.remove(o));
-      fabric.Image.fromURL(dataURL, fImg => {
+      FabricImage.fromURL(dataURL).then(fImg => {
         fImg.scaleToWidth(cv.width); fImg.scaleToHeight(cv.height);
         lockBg(fImg);
         cv.add(fImg);
@@ -2154,12 +2163,11 @@
         selectionBorderColor: accent,
         selectionLineWidth: 1,
       });
-      fabric.Object.prototype.set({
+      FabricObject.prototype.set({
         borderColor: accent,
         borderScaleFactor: 1.5,
         cornerColor: '#ffffff',
         cornerStrokeColor: accent,
-        cornerStyle: 'rect',
         transparentCorners: false,
       });
       cv.renderAll();
@@ -2299,13 +2307,13 @@
         document.getElementById('zoom-slider').value = 100;
         document.getElementById('zoom-pct').textContent = '100%';
         cv.setZoom(1);
-        cv.setWidth(W); cv.setHeight(H);
+        cv.setDimensions({ width: W, height: H });
         cv.clear();
         annots = []; annId = 0; selectedIds.clear();
         undoStack = []; redoStack = [];
         refreshList(); refreshCount(); syncHistBtns();
 
-        fabric.Image.fromURL(dataURL, fImg => {
+        FabricImage.fromURL(dataURL).then(fImg => {
           fImg.scaleToWidth(W); fImg.scaleToHeight(H);
           lockBg(fImg);
           cv.add(fImg);
@@ -2347,13 +2355,14 @@
         // If the click lands on an existing non-background object (e.g. a resize
         // handle or label), don't start a new drawing operation.
         if (opt.target && !opt.target._bg) return;
-        const p = cv.getPointer(opt.e);
+        const p = opt.scenePoint;
 
         if (tool === 'block') {
           // Place block label at click position WITHOUT entering edit mode
           const lbl = getLbl();
           const txt = new fabric.IText(lbl, {
             left: p.x, top: p.y,
+            originX: 'left', originY: 'top',
             fontSize,
             fontFamily: 'DM Mono, monospace',
             fill: color,
@@ -2385,6 +2394,7 @@
           // Free-form text — enters editing immediately, not tracked as block
           const txt = new fabric.IText('', {
             left: p.x, top: p.y,
+            originX: 'left', originY: 'top',
             fontSize,
             fontFamily: 'DM Mono, monospace',
             fill: color,
@@ -2418,6 +2428,7 @@
         if (tool === 'rect') {
           activeObj = new fabric.Rect({
             left: ox, top: oy, width: 0, height: 0,
+            originX: 'left', originY: 'top',
             stroke: color, strokeWidth: strokeW, fill: 'transparent',
             strokeUniform: true, strokeDashArray: dp,
             selectable: false, evented: false,
@@ -2435,7 +2446,7 @@
       });
 
       cv.on('mouse:move', opt => {
-        const p = cv.getPointer(opt.e);
+        const p = opt.scenePoint;
         lastMousePos = p;
         if (!drawing || !activeObj) return;
         if (tool === 'rect') {
@@ -2644,7 +2655,7 @@
       cv.upperCanvasEl.addEventListener('contextmenu', e => {
         e.preventDefault();
         if (!lastSelectedAnn) return;
-        const p = cv.getPointer(e);
+        const p = cv.getScenePoint(e);
         pasteAnnotationAt(lastSelectedAnn, p.x, p.y);
       });
 
@@ -2936,6 +2947,7 @@
           const clips = fronts.map(f => new fabric.Rect({
             left:   f.left,
             top:    f.top,
+            originX: 'left', originY: 'top',
             width:  f.getScaledWidth(),
             height: f.getScaledHeight(),
             angle:  f.angle || 0,
@@ -2973,7 +2985,7 @@
 
       const ncx = center.x + dx, ncy = center.y + dy;
 
-      obj.clone(cloned => {
+      obj.clone(JSON_PROPS).then(cloned => {
         cloned._annId = ++annId;
         cloned.setPositionByOrigin(new fabric.Point(ncx, ncy), 'center', 'center');
         cloned.set({ selectable: true, evented: true, angle: obj.angle || 0 });
@@ -2996,7 +3008,7 @@
         if ((ann.kind === 'rect' && !ann.noBlock) || ann.kind === 'block') autoInc(usedLbl);
         refreshList(); refreshCount(); pushHist();
         cv.renderAll();
-      }, JSON_PROPS);
+      });
     }
 
     // ═══════════════════════════════════════════════════════
@@ -3044,7 +3056,7 @@
     function makeLblText(text, shape) {
       const p = lblPos(shape);
       return new fabric.Text(text, {
-        left: p.x, top: p.y, originX: p.originX,
+        left: p.x, top: p.y, originX: p.originX, originY: 'top',
         fontSize, fontFamily: 'DM Mono, monospace',
         fill: color,
         shadow: makeShadow(),
@@ -3193,6 +3205,7 @@
             const my = (s.y1 + s.y2) / 2 + (s.top  || 0);
             const lbl = new fabric.Text(v, {
               left: mx + 8, top: my - fontSize / 2,
+              originX: 'left', originY: 'top',
               fontSize, fontFamily: 'DM Mono, monospace',
               fill: editAnn.color,
               shadow: makeShadow(),
@@ -3498,7 +3511,7 @@
     function duplicateAnnotationFromList(ann) {
       if (!cv) return;
       const offset = 18;
-      ann.shape.clone(cloned => {
+      ann.shape.clone(JSON_PROPS).then(cloned => {
         cloned._annId = ++annId;
         const cp = ann.shape.getCenterPoint();
         cloned.setPositionByOrigin(new fabric.Point(cp.x + offset, cp.y + offset), 'center', 'center');
@@ -3524,7 +3537,7 @@
         if (ann.kind !== 'line' && ann.kind !== 'text' && !ann.noBlock) autoInc(usedLbl);
         cv.setActiveObject(cloned);
         refreshList(); refreshCount(); pushHist(); cv.renderAll();
-      }, JSON_PROPS);
+      });
     }
 
     function refreshCount() {
@@ -3820,7 +3833,7 @@
 
     function applySnap(snap) {
       histLock = true;
-      cv.loadFromJSON(snap.json, () => {
+      cv.loadFromJSON(snap.json).then(() => {
         cv.renderAll();
         // Re-lock bg objects and re-attach copy controls to annotations
         cv.getObjects().forEach(obj => {
@@ -3911,12 +3924,14 @@
 
       const baseProps = {
         fontSize: fz, fontFamily: 'DM Mono,monospace', fill: col,
+        originY: 'top',
         selectable: true, evented: true, isLegend: true,
       };
 
       // Background box
       cv.add(new fabric.Rect({
         left: bx, top: by, width: bw, height: bh,
+        originX: 'left', originY: 'top',
         fill: 'rgba(0,0,0,0.6)', rx: 5, ry: 5,
         selectable: true, evented: true, isLegend: true,
       }));
@@ -3981,7 +3996,7 @@
       }
       let pasted = 0;
       clipboard.forEach(({ ann, relX, relY }) => {
-        ann.shape.clone(cloned => {
+        ann.shape.clone(JSON_PROPS).then(cloned => {
           cloned._annId = ++annId;
           cloned.setPositionByOrigin(
             new fabric.Point(pasteX + relX, pasteY + relY), 'center', 'center');
@@ -4006,14 +4021,14 @@
           if (ann.kind !== 'line' && ann.kind !== 'text' && !ann.noBlock) autoInc(usedLbl);
           pasted++;
           if (pasted === clipboard.length) { refreshList(); refreshCount(); pushHist(); cv.renderAll(); }
-        }, JSON_PROPS);
+        });
       });
     }
 
     // Paste a copy of ann centered at canvas coordinates (x, y)
     function pasteAnnotationAt(ann, x, y) {
       if (!cv) return;
-      ann.shape.clone(cloned => {
+      ann.shape.clone(JSON_PROPS).then(cloned => {
         cloned._annId = ++annId;
         cloned.setPositionByOrigin(new fabric.Point(x, y), 'center', 'center');
         cloned.set({ selectable: true, evented: true, angle: ann.shape.angle || 0 });
@@ -4037,7 +4052,7 @@
         if (ann.kind !== 'line' && ann.kind !== 'text' && !ann.noBlock) autoInc(usedLbl);
         cv.setActiveObject(cloned);
         refreshList(); refreshCount(); pushHist(); cv.renderAll();
-      }, JSON_PROPS);
+      });
     }
 
     // ═══════════════════════════════════════════════════════
@@ -4106,11 +4121,13 @@
 
       cv.add(new fabric.Rect({
         left: bx, top: by, width: bw, height: bh,
+        originX: 'left', originY: 'top',
         fill: 'rgba(0,0,0,0.65)', rx: 4, ry: 4,
         selectable: true, evented: true, isTitle: true,
       }));
       const itxt = new fabric.IText(text, {
         left: bx + pad, top: by + pad,
+        originX: 'left', originY: 'top',
         fontSize: fz, fontFamily: 'DM Mono, monospace',
         fill: '#ffffff',
         shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.6)', blur: 3, offsetX: 1, offsetY: 1 }),
@@ -4178,7 +4195,7 @@
       document.getElementById('canvas-wrapper').style.display = 'block';
       initCanvas(useDataURL, s.imageName || 'mapping', () => {
         histLock = true;
-        cv.loadFromJSON(s.canvasJSON, () => {
+        cv.loadFromJSON(s.canvasJSON).then(() => {
           // After loadFromJSON the background image may be absent (stripped from saved JSON).
           // Re-add it from useDataURL so the canvas always has a background.
           const finishLoad = () => {
@@ -4206,7 +4223,7 @@
           };
           const hasBg = cv.getObjects().some(o => o._bg);
           if (!hasBg) {
-            fabric.Image.fromURL(useDataURL, fImg => {
+            FabricImage.fromURL(useDataURL).then(fImg => {
               fImg.scaleToWidth(cv.width); fImg.scaleToHeight(cv.height);
               lockBg(fImg);
               cv.add(fImg);
