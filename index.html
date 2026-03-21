@@ -1388,6 +1388,13 @@
           <button class="lstyle-btn" id="lstyle-dashed" onclick="setLineStyle('dashed')" title="Dashed line"> - - </button>
           <button class="lstyle-btn" id="lstyle-dotted" onclick="setLineStyle('dotted')" title="Dotted line"> ··· </button>
         </div>
+        <div class="slabel" title="Arrowheads on line ends">Arrowheads</div>
+        <div class="line-style-row">
+          <button class="lstyle-btn active" id="arrow-none"  onclick="setArrow('none')"  title="No arrowheads">None</button>
+          <button class="lstyle-btn"        id="arrow-end"   onclick="setArrow('end')"   title="Arrow at end">→</button>
+          <button class="lstyle-btn"        id="arrow-start" onclick="setArrow('start')" title="Arrow at start">←</button>
+          <button class="lstyle-btn"        id="arrow-both"  onclick="setArrow('both')"  title="Arrows at both ends">↔</button>
+        </div>
       
       
       
@@ -1785,6 +1792,22 @@
     }
 
     // ═══════════════════════════════════════════════════════
+    //  ARROWHEADS
+    // ═══════════════════════════════════════════════════════
+    function setArrow(mode) {
+      ['none', 'end', 'start', 'both'].forEach(m =>
+        document.getElementById('arrow-' + m).classList.toggle('active', m === mode)
+      );
+      const obj = cv && cv.getActiveObject();
+      if (obj && obj._kind === 'line') {
+        obj.set({ _arrowStart: mode === 'start' || mode === 'both',
+                  _arrowEnd:   mode === 'end'   || mode === 'both' });
+        cv.renderAll();
+        pushHist();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
     //  ANCHOR / FREEFORM TOGGLE
     // ═══════════════════════════════════════════════════════
     function setAnchorMode(mode) {
@@ -2114,6 +2137,34 @@
     // ═══════════════════════════════════════════════════════
     //  FABRIC.JS THEME — match app accent color
     // ═══════════════════════════════════════════════════════
+
+    // Arrowhead rendering — patched onto fabric.Line so it survives JSON round-trips.
+    function drawLineArrowhead(ctx, fromX, fromY, toX, toY, strokeWidth, color) {
+      const size = Math.max(8, strokeWidth * 3.5);
+      const angle = Math.atan2(toY - fromY, toX - fromX);
+      ctx.save();
+      ctx.translate(toX, toY);
+      ctx.rotate(angle);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-size, -size * 0.38);
+      ctx.lineTo(-size,  size * 0.38);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    const _origLineRender = fabric.Line.prototype._render;
+    fabric.Line.prototype._render = function(ctx) {
+      _origLineRender.call(this, ctx);
+      if (!this._arrowStart && !this._arrowEnd) return;
+      const p  = this.calcLinePoints();
+      const sw = this.strokeWidth || 1;
+      const c  = this.stroke || '#000';
+      if (this._arrowEnd)   drawLineArrowhead(ctx, p.x1, p.y1, p.x2, p.y2, sw, c);
+      if (this._arrowStart) drawLineArrowhead(ctx, p.x2, p.y2, p.x1, p.y1, sw, c);
+    };
+
     function applyFabricTheme() {
       if (!cv) return;
       const accent = '#00d4b8';
@@ -2343,6 +2394,17 @@
         if (tiny) { cv.remove(activeObj); annId--; activeObj = null; return; }
 
         activeObj.set({ selectable: true, evented: true });
+        // Fabric.Line does not update width/height/left/top when x2/y2 are changed via
+        // set() during drawing — bake them in now so endpoint controls are positioned correctly.
+        if (tool === 'line') {
+          activeObj.set({
+            width:  Math.abs(activeObj.x2 - activeObj.x1),
+            height: Math.abs(activeObj.y2 - activeObj.y1),
+            left:   (activeObj.x1 + activeObj.x2) / 2,
+            top:    (activeObj.y1 + activeObj.y2) / 2,
+          });
+          activeObj.setCoords();
+        }
         addCopyControls(activeObj);
         const usedLbl = getLbl();
         let lblObj = null;
@@ -2576,7 +2638,7 @@
     }
 
     function addCopyControls(obj) {
-      if (obj._kind !== 'rect' && obj._kind !== 'line') return;
+      if (!obj._kind || obj.isTitle || obj.isLegend) return;
       const off = 22;
       const cs = 20;
       const makeHandler = dir => (evtData, transform) => { duplicateAnnotation(transform.target, dir); return true; };
@@ -2586,6 +2648,35 @@
         mouseUpHandler: makeHandler(dir),
         render: renderCopyBtn,
         cornerSize: cs,
+      });
+      // z-controls (Bring to Front / Send to Back) flanking the rotation handle.
+      // Applied to every annotation kind; title/legend are always kept on top after each action.
+      const zCtrl = (offsetX, symbol, actionFn, tipKey) => new fabric.Control({
+        x: 0, y: -0.5, offsetX, offsetY: -40,
+        cursorStyle: 'pointer',
+        cornerSize: 20,
+        mouseUpHandler(evtData, transform) { actionFn(transform.target); return true; },
+        render(ctx, left, top, styleOverride, fabricObject) {
+          const size = (fabricObject && fabricObject.cornerSize) || 13;
+          const half = size / 2;
+          ctx.save();
+          ctx.fillStyle   = (fabricObject && fabricObject.cornerColor) || 'rgba(255,255,255,0.92)';
+          ctx.strokeStyle = (fabricObject && fabricObject.cornerStrokeColor) || 'rgba(0,0,0,0.25)';
+          ctx.lineWidth   = 1;
+          ctx.fillRect(left - half, top - half, size, size);
+          ctx.strokeRect(left - half, top - half, size, size);
+          ctx.fillStyle    = 'rgba(0,0,0,0.72)';
+          ctx.font         = `bold ${Math.round(size * 0.85)}px sans-serif`;
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(symbol, left, top + 0.5);
+          ctx.restore();
+        },
+        _zTip: tipKey,
+      });
+      const makeZ = () => ({
+        sendToBack:   zCtrl(-35, '↺', t => { cv.sendToBack(t);   elevateSpecialObjects(); updateOverlapClips(); }, 'Send to Back'),
+        bringToFront: zCtrl( 35, '↻', t => { cv.bringToFront(t); elevateSpecialObjects(); updateOverlapClips(); }, 'Bring to Front'),
       });
 
       if (obj._kind === 'line') {
@@ -2598,11 +2689,14 @@
           const otherYKey = isFirst ? 'y2' : 'y1';
           return new fabric.Control({
             positionHandler(dim, finalMatrix, target) {
-              // calcLinePoints() returns local (center-relative) coords of each endpoint.
-              // finalMatrix already includes viewport transform, giving screen coords.
+              // finalMatrix has viewport zoom divided out of local coords (Fabric quirk),
+              // so we must go local → canvas → screen explicitly.
               const lp = target.calcLinePoints();
               const localPt = isFirst ? { x: lp.x1, y: lp.y1 } : { x: lp.x2, y: lp.y2 };
-              return fabric.util.transformPoint(localPt, finalMatrix);
+              const oMtx = target.calcTransformMatrix();
+              const cvPt = fabric.util.transformPoint(localPt, oMtx);
+              const vpt  = (target.canvas && target.canvas.viewportTransform) || [1,0,0,1,0,0];
+              return fabric.util.transformPoint(cvPt, vpt);
             },
             actionHandler(eventData, transform, x, y) {
               const target = transform.target;
@@ -2638,52 +2732,36 @@
           });
         };
 
-        // Replace controls entirely: no scale/rotate handles, only endpoints + copy.
-        obj.controls = {
+        // Replace controls entirely: no scale/rotate handles, only endpoints + copy + z.
+        obj.controls = Object.assign({
           p1: makeEndpoint(true),
           p2: makeEndpoint(false),
           copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
           copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
           copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
           copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
-        };
-      } else {
-        // Rect: keep standard handles + copy buttons + z-depth controls flanking mtr.
-        const zCtrl = (offsetX, symbol, actionFn, tipKey) => new fabric.Control({
-          x: 0, y: -0.5, offsetX, offsetY: -40,
-          cursorStyle: 'pointer',
-          cornerSize: 20,
-          mouseUpHandler(evtData, transform) {
-            actionFn(transform.target);
-            return true;
-          },
-          render(ctx, left, top, styleOverride, fabricObject) {
-            const size = (fabricObject && fabricObject.cornerSize) || 13;
-            const half = size / 2;
-            ctx.save();
-            ctx.fillStyle   = (fabricObject && fabricObject.cornerColor) || 'rgba(255,255,255,0.92)';
-            ctx.strokeStyle = (fabricObject && fabricObject.cornerStrokeColor) || 'rgba(0,0,0,0.25)';
-            ctx.lineWidth   = 1;
-            ctx.fillRect(left - half, top - half, size, size);
-            ctx.strokeRect(left - half, top - half, size, size);
-            ctx.fillStyle    = 'rgba(0,0,0,0.72)';
-            ctx.font         = `bold ${Math.round(size * 0.85)}px sans-serif`;
-            ctx.textAlign    = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(symbol, left, top + 0.5);
-            ctx.restore();
-          },
-          _zTip: tipKey,
-        });
+        }, makeZ());
+      } else if (obj._kind === 'rect') {
+        // Rect: keep all standard handles + copy buttons + z controls.
         obj.controls = Object.assign({}, obj.controls, {
-          copyTop:      ctrl( 0,   -0.5,    0, -off, 'top'),
-          copyBottom:   ctrl( 0,    0.5,    0,  off, 'bottom'),
-          copyLeft:     ctrl(-0.5,  0,  -off,    0, 'left'),
-          copyRight:    ctrl( 0.5,  0,   off,    0, 'right'),
-          sendBackward: zCtrl(-35, '↺', t => { cv.sendBackwards(t); updateOverlapClips(); }, 'Send Backward'),
-          bringForward: zCtrl( 35, '↻', t => { cv.bringForward(t);  updateOverlapClips(); }, 'Bring Forward'),
-        });
+          copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
+          copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
+          copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
+          copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
+        }, makeZ());
+      } else {
+        // text / block / lbl: keep standard handles, add only z controls.
+        obj.controls = Object.assign({}, obj.controls, makeZ());
       }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Z-ORDER HELPERS
+    // ═══════════════════════════════════════════════════════
+    // Title and legend objects must always render on top of annotations.
+    function elevateSpecialObjects() {
+      if (!cv) return;
+      cv.getObjects().filter(o => o.isLegend || o.isTitle).forEach(o => cv.bringToFront(o));
     }
 
     // ═══════════════════════════════════════════════════════
@@ -3111,6 +3189,15 @@
         const elId = +el.dataset.id;
         el.classList.toggle('sel', selectedIds.has(elId));
       });
+      // Sync arrowhead buttons when a line is selected
+      if (obj._kind === 'line') {
+        const mode = (obj._arrowStart && obj._arrowEnd) ? 'both'
+                   : obj._arrowStart ? 'start'
+                   : obj._arrowEnd   ? 'end' : 'none';
+        ['none', 'end', 'start', 'both'].forEach(m =>
+          document.getElementById('arrow-' + m).classList.toggle('active', m === mode)
+        );
+      }
       // Re-evaluate toolbar greying based on selected object kind
       updateToolbarState();
     }
@@ -3529,7 +3616,7 @@
     // ═══════════════════════════════════════════════════════
     //  UNDO / REDO
     // ═══════════════════════════════════════════════════════
-    const JSON_PROPS = ['_bg', '_kind', '_annId', 'isLegend', 'isTitle'];
+    const JSON_PROPS = ['_bg', '_kind', '_annId', 'isLegend', 'isTitle', '_arrowStart', '_arrowEnd'];
 
     // Return canvas JSON with the background image object stripped out.
     // The bg is always recreated from imgDataURL on load, so embedding
@@ -3620,6 +3707,7 @@
         histLock = false;
         syncHistBtns();
         setTool(tool);
+        elevateSpecialObjects();
         updateOverlapClips();
       });
     }
@@ -3973,6 +4061,7 @@
             selectedIds.clear();
             refreshList(); refreshCount(); histLock = false;
             pushHist(); syncHistBtns(); setTool(tool);
+            elevateSpecialObjects();
             updateOverlapClips();
           };
           const hasBg = cv.getObjects().some(o => o._bg);
