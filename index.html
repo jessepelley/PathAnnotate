@@ -2303,7 +2303,7 @@
           activeObj = new fabric.Line([ox, oy, ox, oy], {
             stroke: color, strokeWidth: strokeW,
             strokeLineCap: 'round', strokeDashArray: dp,
-            padding: 8, selectable: false, evented: false,
+            padding: 20, selectable: false, evented: false,
             _kind: 'line', _annId: ++annId,
           });
         }
@@ -2534,6 +2534,20 @@
       ctx.restore();
     }
 
+    function renderEndpointHandle(ctx, left, top, styleOverride, fabricObject) {
+      const size = 14;
+      const half = size / 2;
+      ctx.save();
+      ctx.fillStyle   = (fabricObject && fabricObject.cornerColor) || '#ffffff';
+      ctx.strokeStyle = (fabricObject && fabricObject.cornerStrokeColor) || '#00d4b8';
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.arc(left, top, half, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function addCopyControls(obj) {
       if (obj._kind !== 'rect' && obj._kind !== 'line') return;
       const off = 22;
@@ -2546,12 +2560,74 @@
         render: renderCopyBtn,
         cornerSize: cs,
       });
-      obj.controls = Object.assign({}, obj.controls, {
-        copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
-        copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
-        copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
-        copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
-      });
+
+      if (obj._kind === 'line') {
+        // For lines, replace ALL standard handles with endpoint controls + copy buttons.
+        // Each endpoint handle moves only its own point while the other stays fixed.
+        const makeEndpoint = (isFirst) => {
+          const xKey = isFirst ? 'x1' : 'x2';
+          const yKey = isFirst ? 'y1' : 'y2';
+          const otherXKey = isFirst ? 'x2' : 'x1';
+          const otherYKey = isFirst ? 'y2' : 'y1';
+          return new fabric.Control({
+            positionHandler(dim, finalMatrix, target) {
+              // calcLinePoints() returns local (center-relative) coords of each endpoint.
+              // finalMatrix already includes viewport transform, giving screen coords.
+              const lp = target.calcLinePoints();
+              const localPt = isFirst ? { x: lp.x1, y: lp.y1 } : { x: lp.x2, y: lp.y2 };
+              return fabric.util.transformPoint(localPt, finalMatrix);
+            },
+            actionHandler(eventData, transform, x, y) {
+              const target = transform.target;
+              // Get the other endpoint's current absolute canvas position,
+              // accounting for any existing scale (for backward compatibility).
+              const lp = target.calcLinePoints();
+              const otherLocal = isFirst ? { x: lp.x2, y: lp.y2 } : { x: lp.x1, y: lp.y1 };
+              const matrix = target.calcTransformMatrix();
+              const otherAbs = fabric.util.transformPoint(otherLocal, matrix);
+
+              // x, y is where the user dragged this endpoint (canvas coords).
+              const p1 = isFirst ? { x, y } : otherAbs;
+              const p2 = isFirst ? otherAbs : { x, y };
+              const cx = (p1.x + p2.x) / 2;
+              const cy = (p1.y + p2.y) / 2;
+
+              // Update all line properties and bake out any prior scale.
+              target.set({
+                x1: p1.x, y1: p1.y,
+                x2: p2.x, y2: p2.y,
+                left: cx, top: cy,
+                width:  Math.abs(p2.x - p1.x),
+                height: Math.abs(p2.y - p1.y),
+                scaleX: 1, scaleY: 1,
+              });
+              target.setCoords();
+              return true;
+            },
+            render: renderEndpointHandle,
+            actionName: 'modifyLine',
+            cursorStyle: 'crosshair',
+            cornerSize: 14,
+          });
+        };
+
+        // Replace controls entirely: no scale/rotate handles, only endpoints + copy.
+        obj.controls = {
+          p1: makeEndpoint(true),
+          p2: makeEndpoint(false),
+          copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
+          copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
+          copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
+          copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
+        };
+      } else {
+        obj.controls = Object.assign({}, obj.controls, {
+          copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
+          copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
+          copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
+          copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
+        });
+      }
     }
 
     function duplicateAnnotation(obj, direction) {
