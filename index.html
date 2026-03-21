@@ -1389,13 +1389,6 @@
           <button class="lstyle-btn" id="lstyle-dashed" onclick="setLineStyle('dashed')" title="Dashed line"> - - </button>
           <button class="lstyle-btn" id="lstyle-dotted" onclick="setLineStyle('dotted')" title="Dotted line"> ··· </button>
         </div>
-        <div class="slabel" title="Arrowheads on line ends">Arrowheads</div>
-        <div class="line-style-row">
-          <button class="lstyle-btn active" id="arrow-none"  onclick="setArrow('none')"  title="No arrowheads">None</button>
-          <button class="lstyle-btn"        id="arrow-end"   onclick="setArrow('end')"   title="Arrow at end">→</button>
-          <button class="lstyle-btn"        id="arrow-start" onclick="setArrow('start')" title="Arrow at start">←</button>
-          <button class="lstyle-btn"        id="arrow-both"  onclick="setArrow('both')"  title="Arrows at both ends">↔</button>
-        </div>
       
       
       
@@ -1792,22 +1785,6 @@
         const dp = DASH_PATTERNS[style];
         obj.set('strokeDashArray', dp);
         cv.renderAll();
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════
-    //  ARROWHEADS
-    // ═══════════════════════════════════════════════════════
-    function setArrow(mode) {
-      ['none', 'end', 'start', 'both'].forEach(m =>
-        document.getElementById('arrow-' + m).classList.toggle('active', m === mode)
-      );
-      const obj = cv && cv.getActiveObject();
-      if (obj && obj._kind === 'line') {
-        obj.set({ _arrowStart: mode === 'start' || mode === 'both',
-                  _arrowEnd:   mode === 'end'   || mode === 'both' });
-        cv.renderAll();
-        pushHist();
       }
     }
 
@@ -2718,6 +2695,39 @@
       ctx.restore();
     }
 
+    // Floating arrowhead cycle control rendered on selected lines
+    const ARROW_CYCLE = ['none', 'end', 'start', 'both'];
+    const ARROW_SYMBOLS = { none: '—', end: '→', start: '←', both: '↔' };
+    function arrowModeOf(obj) {
+      return (obj._arrowStart && obj._arrowEnd) ? 'both'
+           : obj._arrowStart ? 'start'
+           : obj._arrowEnd   ? 'end' : 'none';
+    }
+    function renderArrowBtn(ctx, left, top, styleOverride, fabricObject) {
+      const size = 22, half = size / 2, r = 4;
+      const mode = arrowModeOf(fabricObject);
+      const active = mode !== 'none';
+      ctx.save();
+      ctx.fillStyle   = active ? 'rgba(0,212,184,0.92)' : 'rgba(100,100,100,0.82)';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(left - half + r, top - half);
+      ctx.arcTo(left + half, top - half, left + half, top + half, r);
+      ctx.arcTo(left + half, top + half, left - half, top + half, r);
+      ctx.arcTo(left - half, top + half, left - half, top - half, r);
+      ctx.arcTo(left - half, top - half, left + half, top - half, r);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.round(size * 0.68)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(ARROW_SYMBOLS[mode], left, top + 0.5);
+      ctx.restore();
+    }
+
     function renderEndpointHandle(ctx, left, top, styleOverride, fabricObject) {
       const size = 14;
       const half = size / 2;
@@ -2795,20 +2805,32 @@
             },
             actionHandler(eventData, transform, x, y) {
               const target = transform.target;
-              // Get the other endpoint's current absolute canvas position,
-              // accounting for any existing scale (for backward compatibility).
-              const lp = target.calcLinePoints();
-              const otherLocal = isFirst ? { x: lp.x2, y: lp.y2 } : { x: lp.x1, y: lp.y1 };
-              const matrix = target.calcTransformMatrix();
-              const otherAbs = fabric.util.transformPoint(otherLocal, matrix);
 
-              // x, y is where the user dragged this endpoint (canvas coords).
-              const p1 = isFirst ? { x, y } : otherAbs;
-              const p2 = isFirst ? otherAbs : { x, y };
+              // Compute dragged-endpoint position directly from the raw DOM event
+              // so we bypass Fabric.js's getPointer, which double-applies DPR
+              // scaling on HiDPI displays when combined with our setZoom approach.
+              const vpt = target.canvas.viewportTransform; // [sx,0,0,sy,tx,ty]
+              const rect = target.canvas.upperCanvasEl.getBoundingClientRect();
+              const cssX = eventData.clientX - rect.left;
+              const cssY = eventData.clientY - rect.top;
+              const dataX = (cssX - vpt[4]) / vpt[0];
+              const dataY = (cssY - vpt[5]) / vpt[3];
+
+              // Compute other endpoint using direct arithmetic on stored coords.
+              // left/top is always the line centre; (x1-x2)/2 is the half-offset
+              // to p1 from centre — this stays correct even after whole-line moves
+              // where x1/y1/x2/y2 become stale.
+              const halfDx = (target.x1 - target.x2) / 2;
+              const halfDy = (target.y1 - target.y2) / 2;
+              const other = isFirst
+                ? { x: target.left - halfDx, y: target.top - halfDy }  // p2
+                : { x: target.left + halfDx, y: target.top + halfDy }; // p1
+
+              const p1 = isFirst ? { x: dataX, y: dataY } : other;
+              const p2 = isFirst ? other : { x: dataX, y: dataY };
               const cx = (p1.x + p2.x) / 2;
               const cy = (p1.y + p2.y) / 2;
 
-              // Update all line properties and bake out any prior scale.
               target.set({
                 x1: p1.x, y1: p1.y,
                 x2: p2.x, y2: p2.y,
@@ -2827,10 +2849,42 @@
           });
         };
 
+        // Floating arrowhead cycle button — positioned at the line midpoint,
+        // offset upward in screen space so it doesn't sit on top of the line.
+        const arrowCtrl = new fabric.Control({
+          x: 0, y: 0, offsetX: 0, offsetY: -32,
+          cursorStyle: 'pointer',
+          cornerSize: 22,
+          // Place the control at the line's visual midpoint. target.left/top IS the
+          // centre since we always bake width/height/left/top when drawing/editing.
+          positionHandler(dim, finalMatrix, target) {
+            const vpt = (target.canvas && target.canvas.viewportTransform) || [1,0,0,1,0,0];
+            const ctr = fabric.util.transformPoint({ x: target.left, y: target.top }, vpt);
+            ctr.y -= 32;
+            return ctr;
+          },
+          mouseUpHandler(eventData, transform) {
+            const obj = transform.target;
+            if (obj._kind !== 'line') return false;
+            const cur  = arrowModeOf(obj);
+            const next = ARROW_CYCLE[(ARROW_CYCLE.indexOf(cur) + 1) % ARROW_CYCLE.length];
+            obj.set({
+              _arrowStart: next === 'start' || next === 'both',
+              _arrowEnd:   next === 'end'   || next === 'both',
+            });
+            cv.renderAll();
+            pushHist();
+            return true;
+          },
+          render: renderArrowBtn,
+          actionName: 'arrowCycle',
+        });
+
         // Replace controls entirely: no scale/rotate handles, only endpoints + copy + z.
         obj.controls = Object.assign({
           p1: makeEndpoint(true),
           p2: makeEndpoint(false),
+          arrowHead: arrowCtrl,
           copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
           copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
           copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
@@ -3284,15 +3338,6 @@
         const elId = +el.dataset.id;
         el.classList.toggle('sel', selectedIds.has(elId));
       });
-      // Sync arrowhead buttons when a line is selected
-      if (obj._kind === 'line') {
-        const mode = (obj._arrowStart && obj._arrowEnd) ? 'both'
-                   : obj._arrowStart ? 'start'
-                   : obj._arrowEnd   ? 'end' : 'none';
-        ['none', 'end', 'start', 'both'].forEach(m =>
-          document.getElementById('arrow-' + m).classList.toggle('active', m === mode)
-        );
-      }
       // Re-evaluate toolbar greying based on selected object kind
       updateToolbarState();
     }
