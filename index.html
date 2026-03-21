@@ -646,19 +646,19 @@
     /* CANVAS */
     .canvas-area {
       flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       overflow: auto;
       position: relative;
       background: var(--cvbg);
       background-image: linear-gradient(var(--grid) 1px, transparent 1px),
         linear-gradient(90deg, var(--grid) 1px, transparent 1px);
       background-size: 40px 40px;
-      transition: background .2s
+      transition: background .2s;
+      cursor: default
     }
 
     .drop-zone {
+      position: absolute;
+      inset: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -705,7 +705,8 @@
     }
 
     #canvas-wrapper {
-      display: none
+      display: none;
+      margin: 20px auto
     }
 
     #main-canvas {
@@ -1462,7 +1463,7 @@
   </div>
 
   <div class="bottom-bar">
-    <div class="stat" >Ctrl+Z/Y=Undo/Redo · S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Del=Delete</div>
+    <div class="stat" >Ctrl+Z/Y=Undo/Redo · S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Del=Delete · Space/Mid=Pan · Ctrl+Scroll=Zoom</div>
     <div class="stat" style="margin-left:auto">Tool: <span id="st-tool">Rectangle</span></div>
     <div class="stat">Objects: <span id="st-count">0</span></div>
     <div class="bar-sep"></div>
@@ -1670,6 +1671,9 @@
     let lastMousePos = null;   // last known pointer position on canvas (for paste)
     let clipboard = [];        // [{ann, relX, relY}] for Ctrl+C / Ctrl+V
     let shiftHeld = false;     // tracks Shift key for line snapping
+    let spaceHeld = false;     // tracks Space key for pan mode
+    let isPanning = false;
+    let panStart = { x: 0, y: 0, scrollX: 0, scrollY: 0 };
     let lastSelectedAnn = null; // most recently selected annotation (for right-click paste)
 
     let undoStack = [], redoStack = [], histLock = false;
@@ -2189,6 +2193,15 @@
     // ═══════════════════════════════════════════════════════
     function setZoom(pct) {
       if (!cv || !baseW) return;
+      const area = document.getElementById('canvas-area');
+      const wrapper = document.getElementById('canvas-wrapper');
+      // Save the canvas coordinate at the centre of the visible viewport
+      const oldFactor = currentZoom / 100;
+      const scrollCX = area.scrollLeft + area.clientWidth / 2;
+      const scrollCY = area.scrollTop + area.clientHeight / 2;
+      const canvasCX = (scrollCX - wrapper.offsetLeft) / oldFactor;
+      const canvasCY = (scrollCY - wrapper.offsetTop) / oldFactor;
+
       pct = Math.max(25, Math.min(400, pct));
       currentZoom = pct;
       const factor = pct / 100;
@@ -2196,6 +2209,12 @@
       cv.setDimensions({ width: Math.round(baseW * factor), height: Math.round(baseH * factor) });
       document.getElementById('zoom-slider').value = pct;
       document.getElementById('zoom-pct').textContent = pct + '%';
+
+      // After layout updates, restore scroll so the same canvas point stays centred
+      requestAnimationFrame(() => {
+        area.scrollLeft = wrapper.offsetLeft + canvasCX * factor - area.clientWidth / 2;
+        area.scrollTop  = wrapper.offsetTop  + canvasCY * factor - area.clientHeight / 2;
+      });
     }
 
     function adjustZoom(delta) {
@@ -2203,8 +2222,84 @@
     }
 
     function resetZoom() {
-      setZoom(100);
+      if (!cv || !baseW) return;
+      currentZoom = 100;
+      cv.setZoom(1);
+      cv.setDimensions({ width: baseW, height: baseH });
+      document.getElementById('zoom-slider').value = 100;
+      document.getElementById('zoom-pct').textContent = '100%';
+      const area = document.getElementById('canvas-area');
+      area.scrollLeft = 0;
+      area.scrollTop  = 0;
     }
+
+    // ═══════════════════════════════════════════════════════
+    //  PAN  (middle-mouse drag · Space+drag · Ctrl+wheel)
+    // ═══════════════════════════════════════════════════════
+    (function initPan() {
+      const area = document.getElementById('canvas-area');
+
+      function startPan(clientX, clientY) {
+        isPanning = true;
+        panStart = { x: clientX, y: clientY, scrollX: area.scrollLeft, scrollY: area.scrollTop };
+        area.style.cursor = 'grabbing';
+      }
+
+      // Middle-mouse or Space+left-click — capture phase so we intercept before Fabric.js
+      area.addEventListener('mousedown', e => {
+        if (e.button === 1) {
+          e.preventDefault(); // suppress browser auto-scroll cursor
+          startPan(e.clientX, e.clientY);
+        } else if (e.button === 0 && spaceHeld) {
+          e.preventDefault();
+          e.stopPropagation();
+          startPan(e.clientX, e.clientY);
+        }
+      }, { capture: true });
+
+      document.addEventListener('mousemove', e => {
+        if (!isPanning) return;
+        area.scrollLeft = panStart.scrollX - (e.clientX - panStart.x);
+        area.scrollTop  = panStart.scrollY - (e.clientY - panStart.y);
+      });
+
+      document.addEventListener('mouseup', e => {
+        if (!isPanning) return;
+        isPanning = false;
+        area.style.cursor = spaceHeld ? 'grab' : '';
+      });
+
+      // Ctrl+wheel — zoom toward the pointer position
+      area.addEventListener('wheel', e => {
+        if (!cv || !e.ctrlKey) return;
+        e.preventDefault();
+        const wrapper = document.getElementById('canvas-wrapper');
+        const rect = area.getBoundingClientRect();
+        // Mouse position within the scroll content
+        const mouseScrollX = e.clientX - rect.left + area.scrollLeft;
+        const mouseScrollY = e.clientY - rect.top  + area.scrollTop;
+        // Canvas coordinate under the mouse
+        const oldFactor = currentZoom / 100;
+        const canvasX = (mouseScrollX - wrapper.offsetLeft) / oldFactor;
+        const canvasY = (mouseScrollY - wrapper.offsetTop)  / oldFactor;
+
+        const step = e.deltaY > 0 ? -10 : 10;
+        const newPct = Math.max(25, Math.min(400, currentZoom + step * 2));
+        if (newPct === currentZoom) return;
+        currentZoom = newPct;
+        const factor = newPct / 100;
+        cv.setZoom(factor);
+        cv.setDimensions({ width: Math.round(baseW * factor), height: Math.round(baseH * factor) });
+        document.getElementById('zoom-slider').value = newPct;
+        document.getElementById('zoom-pct').textContent = newPct + '%';
+
+        // Shift scroll so the canvas point under the cursor stays under the cursor
+        requestAnimationFrame(() => {
+          area.scrollLeft = wrapper.offsetLeft + canvasX * factor - (e.clientX - rect.left);
+          area.scrollTop  = wrapper.offsetTop  + canvasY * factor - (e.clientY - rect.top);
+        });
+      }, { passive: false });
+    })();
 
     function initCanvas(dataURL, name, afterCb) {
       const img = new Image();
@@ -4118,7 +4213,13 @@
     // ═══════════════════════════════════════════════════════
     //  KEYBOARD
     // ═══════════════════════════════════════════════════════
-    document.addEventListener('keyup', e => { if (e.key === 'Shift') shiftHeld = false; });
+    document.addEventListener('keyup', e => {
+      if (e.key === 'Shift') shiftHeld = false;
+      if (e.code === 'Space') {
+        spaceHeld = false;
+        if (!isPanning) document.getElementById('canvas-area').style.cursor = '';
+      }
+    });
     document.addEventListener('keydown', e => {
       if (e.key === 'Shift') shiftHeld = true;
       const tag = document.activeElement.tagName;
@@ -4126,6 +4227,14 @@
       // Consider Fabric.js IText editing as "in input" so Backspace/Ctrl+C etc.
       // operate on the text being edited rather than on annotations.
       const iTextEditing = cv && cv.getActiveObject() && cv.getActiveObject().isEditing;
+
+      // Space — pan mode (grab cursor); prevent browser page-scroll
+      if (e.code === 'Space' && !inInput && !iTextEditing) {
+        e.preventDefault();
+        spaceHeld = true;
+        document.getElementById('canvas-area').style.cursor = 'grab';
+        return;
+      }
 
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); doRedo(); return; }
