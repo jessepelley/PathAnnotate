@@ -2677,7 +2677,7 @@
       });
       cv.on('object:rotating', opt => {
         glueLbl(opt.target);
-        if (opt.target._kind === 'rect') glueAnchoredBlocks(opt.target);
+        if (opt.target._kind === 'rect') { glueAnchoredBlocks(opt.target); updateOverlapClips(); }
         if (opt.target._kind === 'line') glueAnchoredBlocksToLine(opt.target);
       });
       cv.on('object:modified', opt => {
@@ -3072,13 +3072,22 @@
         rectShapes.push(activeObj); // selected rect is logically frontmost
       }
 
+      // Refresh corner coords so intersectsWithObject uses the current geometry.
+      // Without this, Fabric v7 can return stale intersection results during live drags.
+      rectShapes.forEach(r => r.setCoords());
+
       for (let i = 0; i < rectShapes.length; i++) {
         const back = rectShapes[i];
         // Collect all rects that are in front of this one and overlap it.
-        const fronts = rectShapes.slice(i + 1).filter(f => back.intersectsWithObject(f) || back.isContainedWithinObject(f) || f.isContainedWithinObject(back));
+        const fronts = rectShapes.slice(i + 1).filter(f =>
+          back.intersectsWithObject(f) ||
+          back.isContainedWithinObject(f) ||
+          f.isContainedWithinObject(back)
+        );
 
         if (fronts.length === 0) {
           back.clipPath = null;
+          back.dirty = true; // force cache invalidation so Fabric re-renders this rect
         } else {
           // Build inverted clip rect(s) that hide back's stroke inside each front rect.
           const clips = fronts.map(f => new fabric.Rect({
@@ -3096,6 +3105,7 @@
           } else {
             back.clipPath = new fabric.Group(clips, { absolutePositioned: true, inverted: true });
           }
+          back.dirty = true; // force cache invalidation
         }
       }
       cv.requestRenderAll();
