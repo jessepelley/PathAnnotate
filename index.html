@@ -3116,10 +3116,14 @@
       if (!ann) return;
 
       const angle = ((obj.angle || 0) * Math.PI) / 180;
-      // getScaledWidth/Height already include stroke contribution in Fabric.js v5,
-      // so no extra addition is needed — duplicates will touch with zero gap.
-      const W = obj.getScaledWidth();
-      const H = obj.getScaledHeight();
+      // getScaledWidth/Height include strokeWidth in Fabric v6+.
+      // Subtract strokeWidth so the new rect's path edge coincides exactly with the
+      // originating rect's opposite path edge: the two strokes then overlap by one full
+      // strokeWidth, and updateOverlapClips() clips the back border away leaving a
+      // single clean shared edge — exactly like adjacent tissue sections in a cassette.
+      const sw = obj.strokeWidth || 0;
+      const W = obj.getScaledWidth()  - sw;
+      const H = obj.getScaledHeight() - sw;
 
       const center = obj.getCenterPoint();
       const cos = Math.cos(angle), sin = Math.sin(angle);
