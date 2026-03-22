@@ -2448,6 +2448,7 @@
         if (tiny) { cv.remove(activeObj); annId--; activeObj = null; return; }
 
         activeObj.set({ selectable: true, evented: true });
+        activeObj.setCoords(); // update hit-detection coords after drawing (Fabric v7 aCoords cache)
         // Fabric.Line does not update width/height/left/top when x2/y2 are changed via
         // set() during drawing — bake them in now so endpoint controls are positioned correctly.
         if (tool === 'line') {
@@ -3300,6 +3301,7 @@
         obj.evented = sel || alwaysSel;
       });
       if (!sel) cv.discardActiveObject();
+      cv.getObjects().forEach(obj => obj.setCoords()); // refresh all hit-detection coords (Fabric v7)
       cv.renderAll();
     }
 
