@@ -1725,6 +1725,7 @@
     let isPanning = false;
     let panStart = { x: 0, y: 0, scrollX: 0, scrollY: 0 };
     let lastSelectedAnn = null; // most recently selected annotation (for right-click paste)
+    let lastElevatedRect = null; // last rect selected — kept as frontmost in clip logic even after deselect
 
     let undoStack = [], redoStack = [], histLock = false;
     let imgDataURL = null;
@@ -2595,8 +2596,8 @@
             refreshList();
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
-            // Recompute clip paths: the selected rect is treated as frontmost
-            if (obj._kind === 'rect') updateOverlapClips();
+            // Track as elevated so clips keep it frontmost even after deselect
+            if (obj._kind === 'rect') { lastElevatedRect = obj; updateOverlapClips(); }
             return; // refreshList already called syncSidebar via re-render
           }
         }
@@ -2615,13 +2616,13 @@
             refreshList();
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
-            // Recompute clip paths: the selected rect is treated as frontmost
-            if (obj._kind === 'rect') updateOverlapClips();
+            // Track as elevated so clips keep it frontmost even after deselect
+            if (obj._kind === 'rect') { lastElevatedRect = obj; updateOverlapClips(); }
             syncSidebar();
             return;
           }
         }
-        // Non-rect selected or nothing — revert clips to pure z-order
+        // Non-rect selected — recompute clips (lastElevatedRect still applies)
         updateOverlapClips();
         syncSidebar();
       });
@@ -2629,7 +2630,7 @@
         if (pendingIncLabel !== null) { autoInc(pendingIncLabel); pendingIncLabel = null; }
         document.querySelectorAll('.ann-item').forEach(i => i.classList.remove('sel'));
         updateToolbarState();
-        // Revert clip paths to pure z-order now that nothing is selected
+        // Recompute clips — lastElevatedRect keeps the last-selected rect frontmost
         updateOverlapClips();
       });
 
@@ -3060,16 +3061,16 @@
     function updateOverlapClips() {
       if (!cv) return;
       const allObjs = cv.getObjects();
-      // The selected rect is visually "on top" regardless of actual z-order:
-      // treat it as the frontmost element when computing which borders to clip.
-      const activeObj = cv.getActiveObject();
+      // lastElevatedRect is the last rect the user selected/interacted with.
+      // It persists after deselection so clips stay consistent with what the
+      // user last explicitly brought forward — without needing bringToFront().
       let rectShapes = annots
         .filter(a => a.kind === 'rect' && a.shape)
         .map(a => a.shape)
         .sort((a, b) => allObjs.indexOf(a) - allObjs.indexOf(b)); // back → front order
-      if (activeObj && activeObj._kind === 'rect' && rectShapes.includes(activeObj)) {
-        rectShapes = rectShapes.filter(r => r !== activeObj);
-        rectShapes.push(activeObj); // selected rect is logically frontmost
+      if (lastElevatedRect && rectShapes.includes(lastElevatedRect)) {
+        rectShapes = rectShapes.filter(r => r !== lastElevatedRect);
+        rectShapes.push(lastElevatedRect); // treat as logically frontmost
       }
 
       // Refresh corner coords so intersectsWithObject uses the current geometry.
