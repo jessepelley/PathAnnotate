@@ -2549,12 +2549,15 @@
           const a = annots.find(a => a.shape === obj);
           if (a && anchorMode === 'freeform') {
             a._anchorRect = null; a._anchorPoint = null;
+            a._anchorLine = null; a._lineT = null; a._lineSide = null;
           }
           return;
         }
         glueLbl(obj);
         // When a rect moves, also move any block labels anchored to it
         if (obj._kind === 'rect') { glueAnchoredBlocks(obj); updateOverlapClips(); }
+        // When a line moves, reposition any block labels anchored to it
+        if (obj._kind === 'line') { glueAnchoredBlocksToLine(obj); }
         // Shift-constrain: lock movement to the dominant axis for lines
         if (shiftHeld && obj._kind === 'line') {
           if (!obj._snapStart) obj._snapStart = { left: obj.left, top: obj.top };
@@ -2569,10 +2572,12 @@
       cv.on('object:scaling', opt => {
         glueLbl(opt.target);
         if (opt.target._kind === 'rect') { glueAnchoredBlocks(opt.target); updateOverlapClips(); }
+        if (opt.target._kind === 'line') { glueAnchoredBlocksToLine(opt.target); }
       });
       cv.on('object:rotating', opt => {
         glueLbl(opt.target);
         if (opt.target._kind === 'rect') glueAnchoredBlocks(opt.target);
+        if (opt.target._kind === 'line') glueAnchoredBlocksToLine(opt.target);
       });
       cv.on('object:modified', opt => {
         const obj = opt.target;
@@ -3120,22 +3125,26 @@
       // 1. Dropped inside a rect — use that rect (also handles switching to a new rect)
       let parentRect = rectContaining(cp.x, cp.y);
 
-      // 2. Outside all rects but already anchored — keep the current anchor rect
+      // 2. Outside all rects but already anchored to a rect — keep the current anchor rect
       if (!parentRect && ann._anchorRect) {
         parentRect = annots.find(a => a.kind === 'rect' && a.id === ann._anchorRect) || null;
       }
 
-      if (!parentRect) {
-        ann._anchorRect = null; ann._anchorPoint = null;
+      if (parentRect) {
+        // Snap to the nearest of the 9 hotpoints on the rect
+        const hp = nearestHotpoint(obj, parentRect.shape);
+        const p  = lblPosForAnchor(parentRect.shape, hp);
+        obj.set({ left: p.x, top: p.y, originX: p.originX });
+        ann._anchorRect  = parentRect.id;
+        ann._anchorPoint = hp;
+        // Clear any line anchor so the two systems don't conflict
+        ann._anchorLine  = null; ann._lineT = null; ann._lineSide = null;
+        cv.renderAll();
         return;
       }
 
-      // Snap to the nearest of the 9 hotpoints on the rect
-      const hp = nearestHotpoint(obj, parentRect.shape);
-      const p  = lblPosForAnchor(parentRect.shape, hp);
-      obj.set({ left: p.x, top: p.y, originX: p.originX });
-      ann._anchorRect  = parentRect.id;
-      ann._anchorPoint = hp;
+      // 3. No rect — try snapping to the nearest line
+      snapBlockToLine(ann);
       cv.renderAll();
     }
 
@@ -3166,6 +3175,107 @@
         if (a.kind !== 'block' || a._anchorRect !== rectAnn.id || !a._anchorPoint) return;
         const p = lblPosForAnchor(rectShape, a._anchorPoint);
         a.shape.set({ left: p.x, top: p.y, originX: p.originX });
+      });
+    }
+
+    // Return canvas-space endpoints of a Fabric Line object.
+    // Uses calcLinePoints() (local space) + the object's full transform matrix.
+    function getLineEndpoints(lineShape) {
+      const p = lineShape.calcLinePoints();
+      const m = lineShape.calcTransformMatrix();
+      const p1 = fabric.util.transformPoint({ x: p.x1, y: p.y1 }, m);
+      const p2 = fabric.util.transformPoint({ x: p.x2, y: p.y2 }, m);
+      return { p1, p2 };
+    }
+
+    // Closest point on segment (x1,y1)→(x2,y2) to point (px,py).
+    // Returns { x, y, t } where t ∈ [0,1] is the parametric position.
+    function closestPointOnSegment(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) return { x: x1, y: y1, t: 0 };
+      const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+      return { x: x1 + t * dx, y: y1 + t * dy, t };
+    }
+
+    // Place a block label at a perpendicular offset from a point along a line.
+    // Stores _anchorLine / _lineT / _lineSide on the ann object and clears rect anchor.
+    function positionBlockOnLine(ann, lineAnn, t, side) {
+      const { p1, p2 } = getLineEndpoints(lineAnn.shape);
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy) || 1;
+      // Unit normal perpendicular to line direction
+      const nx = -dy / len, ny = dx / len;
+      // Point on the line at parameter t
+      const cx = p1.x + t * dx, cy = p1.y + t * dy;
+      const offset = fontSize / 2 + 4;
+      ann.shape.set({
+        left: cx + nx * offset * side,
+        top:  cy + ny * offset * side,
+        originX: 'center',
+        originY: 'center',
+      });
+      ann._anchorLine  = lineAnn.id;
+      ann._lineT       = t;
+      ann._lineSide    = side;
+      // Clear any rect anchor so the two systems don't conflict
+      ann._anchorRect  = null;
+      ann._anchorPoint = null;
+    }
+
+    // Snap a block label to the nearest point on a nearby line.
+    // Called as fallback from snapBlockToRect when no rect contains the label.
+    const LINE_SNAP_DIST = 60; // pixels — max distance from line to trigger snap
+    function snapBlockToLine(ann) {
+      if (!ann || ann.kind !== 'block') return;
+      const obj = ann.shape;
+      const cp  = obj.getCenterPoint();
+
+      const lines = annots.filter(a => a.kind === 'line' && a.shape);
+      let bestLine = null, bestDist = LINE_SNAP_DIST, bestT = 0.5, bestSide = 1;
+
+      for (const lineAnn of lines) {
+        const { p1, p2 } = getLineEndpoints(lineAnn.shape);
+        const closest = closestPointOnSegment(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y);
+        const d = Math.hypot(cp.x - closest.x, cp.y - closest.y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestLine = lineAnn;
+          bestT    = closest.t;
+          // Cross product sign determines which side of the line the drop is on
+          const ldx = p2.x - p1.x, ldy = p2.y - p1.y;
+          const cross = (cp.x - closest.x) * (-ldy) + (cp.y - closest.y) * ldx;
+          bestSide = cross >= 0 ? 1 : -1;
+        }
+      }
+
+      // No close line found — keep existing anchor (lets the user nudge t along the line)
+      if (!bestLine && ann._anchorLine) {
+        const lineAnn = annots.find(a => a.kind === 'line' && a.id === ann._anchorLine);
+        if (lineAnn) {
+          const { p1, p2 } = getLineEndpoints(lineAnn.shape);
+          const closest = closestPointOnSegment(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y);
+          positionBlockOnLine(ann, lineAnn, closest.t, ann._lineSide);
+          return;
+        }
+      }
+
+      if (!bestLine) {
+        ann._anchorLine = null; ann._lineT = null; ann._lineSide = null;
+        return;
+      }
+
+      positionBlockOnLine(ann, bestLine, bestT, bestSide);
+    }
+
+    // Reposition all block labels anchored to a line (called on line move/scale/rotate)
+    function glueAnchoredBlocksToLine(lineShape) {
+      if (anchorMode !== 'anchor') return;
+      const lineAnn = annots.find(a => a.shape === lineShape);
+      if (!lineAnn) return;
+      annots.forEach(a => {
+        if (a.kind !== 'block' || a._anchorLine !== lineAnn.id) return;
+        positionBlockOnLine(a, lineAnn, a._lineT, a._lineSide);
       });
     }
 
