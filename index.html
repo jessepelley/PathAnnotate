@@ -3623,16 +3623,11 @@
       }
       // Update block label input when a block/lbl/rect annotation is selected.
       // Text objects are free-form labels, not block labels — do not sync them.
-      if (obj._kind === 'block') {
-        const a = annots.find(a => a.shape === obj);
-        if (a && a.label) setLbl(a.label);
-      } else if (obj._kind === 'lbl') {
-        const a = annots.find(a => a.lbl === obj);
-        if (a && a.label) setLbl(a.label);
-      } else if (obj._kind === 'rect') {
-        const a = annots.find(a => a.shape === obj);
-        if (a && a.label) setLbl(a.label);
-      }
+      // NOTE: we do NOT call setLbl(a.label) here. Overwriting the counter with the
+      // selected object's existing label causes duplicates: if the user selects rect "A"
+      // then uses a copy button to create an adjacent rect, getLbl() would return "A"
+      // and the letter-toggle would assign "A" again. The counter is managed solely
+      // by autoInc() and is reset only on canvas clear / session load.
       // Sync ann-item highlights
       document.querySelectorAll('.ann-item').forEach(el => {
         const elId = +el.dataset.id;
