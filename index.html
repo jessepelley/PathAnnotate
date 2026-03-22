@@ -1725,7 +1725,6 @@
     let isPanning = false;
     let panStart = { x: 0, y: 0, scrollX: 0, scrollY: 0 };
     let lastSelectedAnn = null; // most recently selected annotation (for right-click paste)
-    let _bringToFrontPending = false; // guards re-entry in selection handlers after bringToFront
 
     let undoStack = [], redoStack = [], histLock = false;
     let imgDataURL = null;
@@ -2584,32 +2583,6 @@
         activeObj = null;
       });
 
-      // Bring a selected rect to the front so the selected object always renders above
-      // sibling rects and overlap-clipping reflects the new z-order.
-      // Must be deferred (setTimeout 0) because bringToFront() removes+re-adds the object
-      // internally, which clears _activeObject; we re-select it afterward.
-      // The _bringToFrontPending flag prevents the programmatic re-selection from triggering
-      // another bringToFront cycle.
-      function _bringSelectedRectToFront(obj) {
-        if (_bringToFrontPending || !obj || obj._bg || obj.isTitle || obj.isLegend) return;
-        if (obj._kind !== 'rect') return;
-        // Skip if already at the front (just before any special objects)
-        const objs = cv.getObjects();
-        const myIdx = objs.indexOf(obj);
-        const frontIdx = objs.reduce((hi, o, i) => (!o._bg && !o.isTitle && !o.isLegend ? i : hi), -1);
-        if (myIdx === frontIdx) return;
-        _bringToFrontPending = true;
-        setTimeout(() => {
-          if (!cv) { _bringToFrontPending = false; return; }
-          cv.bringToFront(obj);
-          elevateSpecialObjects();
-          updateOverlapClips();
-          cv.setActiveObject(obj);
-          _bringToFrontPending = false;
-          cv.requestRenderAll();
-        }, 0);
-      }
-
       cv.on('selection:created', opt => {
         const obj = cv.getActiveObject();
         if (obj && !obj._bg) {
@@ -2622,7 +2595,8 @@
             refreshList();
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
-            _bringSelectedRectToFront(obj);
+            // Recompute clip paths: the selected rect is treated as frontmost
+            if (obj._kind === 'rect') updateOverlapClips();
             return; // refreshList already called syncSidebar via re-render
           }
         }
@@ -2641,17 +2615,22 @@
             refreshList();
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
-            _bringSelectedRectToFront(obj);
+            // Recompute clip paths: the selected rect is treated as frontmost
+            if (obj._kind === 'rect') updateOverlapClips();
             syncSidebar();
             return;
           }
         }
+        // Non-rect selected or nothing — revert clips to pure z-order
+        updateOverlapClips();
         syncSidebar();
       });
       cv.on('selection:cleared', () => {
         if (pendingIncLabel !== null) { autoInc(pendingIncLabel); pendingIncLabel = null; }
         document.querySelectorAll('.ann-item').forEach(i => i.classList.remove('sel'));
         updateToolbarState();
+        // Revert clip paths to pure z-order now that nothing is selected
+        updateOverlapClips();
       });
 
       cv.on('object:moving', opt => {
@@ -3081,10 +3060,17 @@
     function updateOverlapClips() {
       if (!cv) return;
       const allObjs = cv.getObjects();
-      const rectShapes = annots
+      // The selected rect is visually "on top" regardless of actual z-order:
+      // treat it as the frontmost element when computing which borders to clip.
+      const activeObj = cv.getActiveObject();
+      let rectShapes = annots
         .filter(a => a.kind === 'rect' && a.shape)
         .map(a => a.shape)
         .sort((a, b) => allObjs.indexOf(a) - allObjs.indexOf(b)); // back → front order
+      if (activeObj && activeObj._kind === 'rect' && rectShapes.includes(activeObj)) {
+        rectShapes = rectShapes.filter(r => r !== activeObj);
+        rectShapes.push(activeObj); // selected rect is logically frontmost
+      }
 
       for (let i = 0; i < rectShapes.length; i++) {
         const back = rectShapes[i];
