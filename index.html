@@ -941,13 +941,19 @@
       border-radius: 7px;
       padding: 6px 7px;
       display: none;
+      flex-direction: column;
       gap: 5px;
-      align-items: center;
       box-shadow: 0 4px 20px rgba(0, 0, 0, .5)
     }
 
     .edit-popup.open {
       display: flex
+    }
+
+    .popup-row {
+      display: flex;
+      gap: 5px;
+      align-items: center
     }
 
     .edit-popup input {
@@ -986,6 +992,38 @@
     }
 
     .edit-popup .popup-spin:hover { background: var(--accent); color: #fff }
+
+    .popup-anchor-row {
+      display: none
+    }
+
+    .popup-anchor-row.visible {
+      display: flex;
+      gap: 4px
+    }
+
+    .popup-anchor-row .anchor-toggle {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px
+    }
+
+    /* CUSTOM COLOR SWATCH (the + picker button) */
+    .swatch-add {
+      cursor: pointer;
+      border: 1.5px dashed var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative
+    }
+
+    .swatch-add:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
 
     /* LEGEND MODAL */
     .modal-bg {
@@ -1365,14 +1403,6 @@
       <!-- hidden input keeps getLbl/setLbl working without a visible toolbar widget -->
       <input type="text" id="block-label" value="1" style="display:none" aria-hidden="true">
 
-      <div class="sidebar-section" id="section-labelpos" title="Controls where block labels are positioned relative to their rectangle">
-        <div class="anchor-toggle-row">
-          <button class="anchor-toggle active" id="anchor-btn" onclick="setAnchorMode('anchor')"
-            title="Snap label to one of 9 fixed anchor points around the rectangle">⊞ Anchor</button>
-          <button class="anchor-toggle" id="freeform-btn" onclick="setAnchorMode('freeform')"
-            title="Drag label freely; position is stored relative to rectangle centre">↗ Freeform</button>
-        </div>
-      </div>
 
 
       
@@ -1473,10 +1503,30 @@
 
   <!-- Inline label editor -->
   <div class="edit-popup" id="edit-popup">
-    <button class="popup-spin" onclick="popupSpinMinus()" title="Shrink range">−</button>
-    <input type="text" id="edit-input" placeholder="Label…">
-    <button class="popup-spin" onclick="popupSpinPlus()" title="Extend range">+</button>
-    <button onclick="commitEdit()">✓</button>
+    <div class="popup-row">
+      <button class="popup-spin" onclick="popupSpinMinus()" title="Shrink range">−</button>
+      <input type="text" id="edit-input" placeholder="Label…">
+      <button class="popup-spin" onclick="popupSpinPlus()" title="Extend range">+</button>
+      <button onclick="commitEdit()">✓</button>
+    </div>
+    <div class="popup-row popup-anchor-row" id="popup-anchor-row">
+      <button class="anchor-toggle" id="popup-anchor-btn" onclick="setAnchorMode('anchor')"
+        title="Snap labels to fixed positions around rectangles and lines">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        Anchor
+      </button>
+      <button class="anchor-toggle" id="popup-freeform-btn" onclick="setAnchorMode('freeform')"
+        title="Drag labels freely anywhere on the canvas">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2"/>
+          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+        </svg>
+        Freeform
+      </button>
+    </div>
   </div>
 
   <!-- Legend modal -->
@@ -1710,35 +1760,73 @@
     // ═══════════════════════════════════════════════════════
     //  COLOR SWATCHES
     // ═══════════════════════════════════════════════════════
+
+    // Apply a color to the currently selected canvas object and update the annotation record.
+    function applyColorToSelection(c) {
+      if (!cv) return;
+      const obj = cv.getActiveObject();
+      if (!obj || obj._bg) return;
+      if (obj._kind === 'rect' || obj._kind === 'line') {
+        obj.set('stroke', c);
+        const a = annots.find(a => a.shape === obj);
+        if (a) { a.color = c; if (a.lbl) a.lbl.set('fill', c); }
+      } else if (obj._kind === 'text' || obj._kind === 'block' || obj._kind === 'lbl') {
+        obj.set('fill', c);
+        const a = annots.find(a => a.shape === obj || a.lbl === obj);
+        if (a) a.color = c;
+      }
+      cv.renderAll(); refreshList();
+    }
+
+    let customSwatchEl = null; // the + picker label element, set by buildSwatches
+
     (function buildSwatches() {
       const row = document.getElementById('color-row');
+
+      function activateSwatch(c, el) {
+        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+        color = c;
+        applyColorToSelection(c);
+        saveSettings();
+      }
+
       COLORS.forEach(c => {
         const el = document.createElement('div');
         el.className = 'swatch' + (c === color ? ' active' : '');
         el.style.background = c;
         el.title = c;
         if (c === '#000000' || c === '#ffffff') el.dataset.border = '1';
-        el.onclick = () => {
-          document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-          el.classList.add('active');
-          color = c;
-          if (!cv) return;
-          const obj = cv.getActiveObject();
-          if (!obj || obj._bg) return;
-          if (obj._kind === 'rect' || obj._kind === 'line') {
-            obj.set('stroke', c);
-            const a = annots.find(a => a.shape === obj);
-            if (a) { a.color = c; if (a.lbl) a.lbl.set('fill', c); }
-          } else if (obj._kind === 'text' || obj._kind === 'block' || obj._kind === 'lbl') {
-            obj.set('fill', c);
-            const a = annots.find(a => a.shape === obj || a.lbl === obj);
-            if (a) a.color = c;
-          }
-          cv.renderAll(); refreshList();
-          saveSettings();
-        };
+        el.onclick = () => activateSwatch(c, el);
         row.appendChild(el);
       });
+
+      // Custom color picker — a "+" swatch that opens the native color wheel.
+      // After picking, the swatch shows the chosen color and becomes the active swatch.
+      const addLabel = document.createElement('label');
+      addLabel.className = 'swatch swatch-add';
+      addLabel.id = 'swatch-add';
+      addLabel.title = 'Custom color…';
+      addLabel.innerHTML =
+        `<svg width="9" height="9" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.5" style="pointer-events:none">` +
+        `<line x1="9" y1="1" x2="9" y2="17"/><line x1="1" y1="9" x2="17" y2="9"/></svg>`;
+
+      const colorInp = document.createElement('input');
+      colorInp.type = 'color';
+      colorInp.id = 'custom-color-input';
+      colorInp.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
+      colorInp.addEventListener('input', function () {
+        const c = this.value;
+        addLabel.style.background = c;
+        if (c === '#000000' || c === '#ffffff') addLabel.dataset.border = '1';
+        else delete addLabel.dataset.border;
+        addLabel.title = c;
+        activateSwatch(c, addLabel);
+      });
+
+      addLabel.appendChild(colorInp);
+      row.appendChild(addLabel);
+      customSwatchEl = addLabel;
     })();
 
     // ═══════════════════════════════════════════════════════
@@ -1798,10 +1886,16 @@
     // ═══════════════════════════════════════════════════════
     //  ANCHOR / FREEFORM TOGGLE
     // ═══════════════════════════════════════════════════════
+    function syncPopupAnchorBtns() {
+      const ab = document.getElementById('popup-anchor-btn');
+      const fb = document.getElementById('popup-freeform-btn');
+      if (ab) ab.classList.toggle('active', anchorMode === 'anchor');
+      if (fb) fb.classList.toggle('active', anchorMode === 'freeform');
+    }
+
     function setAnchorMode(mode) {
       anchorMode = mode;
-      document.getElementById('anchor-btn').classList.toggle('active', mode === 'anchor');
-      document.getElementById('freeform-btn').classList.toggle('active', mode === 'freeform');
+      syncPopupAnchorBtns();
       saveSettings();
     }
 
@@ -1946,9 +2040,12 @@
 
     function saveSettings() {
       try {
+        // Save custom color only if the custom swatch is currently active
+        const customColor = (customSwatchEl && !COLORS.includes(customSwatchEl.title))
+          ? customSwatchEl.title : null;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify({
           color, strokeW, fontSize, anchor, anchorMode, lineStyle, dark,
-          lbl: getLbl(),
+          lbl: getLbl(), customColor,
         }));
       } catch (e) {}
     }
@@ -1959,6 +2056,13 @@
         if (!raw) return;
         const s = JSON.parse(raw);
         if (!s) return;
+        // Restore custom swatch background before the color-matching pass below
+        if (s.customColor && customSwatchEl) {
+          customSwatchEl.style.background = s.customColor;
+          customSwatchEl.title = s.customColor;
+          const ci = document.getElementById('custom-color-input');
+          if (ci) ci.value = s.customColor;
+        }
         if (s.color) {
           color = s.color;
           document.querySelectorAll('.swatch').forEach(el => el.classList.toggle('active', el.title === color));
@@ -2549,12 +2653,15 @@
           const a = annots.find(a => a.shape === obj);
           if (a && anchorMode === 'freeform') {
             a._anchorRect = null; a._anchorPoint = null;
+            a._anchorLine = null; a._lineT = null; a._lineSide = null;
           }
           return;
         }
         glueLbl(obj);
         // When a rect moves, also move any block labels anchored to it
         if (obj._kind === 'rect') { glueAnchoredBlocks(obj); updateOverlapClips(); }
+        // When a line moves, reposition any block labels anchored to it
+        if (obj._kind === 'line') { glueAnchoredBlocksToLine(obj); }
         // Shift-constrain: lock movement to the dominant axis for lines
         if (shiftHeld && obj._kind === 'line') {
           if (!obj._snapStart) obj._snapStart = { left: obj.left, top: obj.top };
@@ -2569,10 +2676,12 @@
       cv.on('object:scaling', opt => {
         glueLbl(opt.target);
         if (opt.target._kind === 'rect') { glueAnchoredBlocks(opt.target); updateOverlapClips(); }
+        if (opt.target._kind === 'line') { glueAnchoredBlocksToLine(opt.target); }
       });
       cv.on('object:rotating', opt => {
         glueLbl(opt.target);
         if (opt.target._kind === 'rect') glueAnchoredBlocks(opt.target);
+        if (opt.target._kind === 'line') glueAnchoredBlocksToLine(opt.target);
       });
       cv.on('object:modified', opt => {
         const obj = opt.target;
@@ -2605,16 +2714,21 @@
         // which fires object:removed/added events and clears _activeObject. Calling it
         // synchronously inside object:modified (which fires before _currentTransform is
         // cleared) corrupts Fabric's transform state and causes objects to stick to the mouse.
+        // updateOverlapClips and pushHist are also deferred so they run AFTER the z-order
+        // change and capture the correct final state.
         if (obj && !obj._bg && !obj.isTitle && !obj.isLegend) {
           setTimeout(() => {
             if (!cv) return;
             cv.bringToFront(obj);
             elevateSpecialObjects();
+            if (obj._kind === 'rect') updateOverlapClips();
             cv.requestRenderAll();
+            pushHist();
           }, 0);
+        } else {
+          if (obj && obj._kind === 'rect') updateOverlapClips();
+          pushHist();
         }
-        if (obj && obj._kind === 'rect') updateOverlapClips();
-        pushHist();
       });
 
       cv.on('mouse:dblclick', opt => {
@@ -2742,14 +2856,13 @@
       ctx.translate(left, top);
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
-      // colour is set before this call via _letterBtnHasLabel flag on the object
       ctx.fillStyle = ctx._letterActive ? '#4caf50' : '#607d8b';
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 9px DM Mono, monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(ctx._letterActive ? ctx._letterText : 'A+', 0, 1);
+      ctx.fillText(ctx._letterText, 0, 1);
       ctx.restore();
     }
 
@@ -2758,7 +2871,10 @@
       return function(ctx, left, top, styleOverride, target) {
         const ann = annots.find(a => a.shape === fabricObj);
         ctx._letterActive = !!(ann && ann.lbl);
-        ctx._letterText   = (ann && ann.label && ann.label.length <= 4) ? ann.label : (ann && ann.label ? ann.label[0] : 'A');
+        // Active: show the assigned label. Inactive: show the next label that will be assigned.
+        ctx._letterText = ctx._letterActive
+          ? ((ann.label && ann.label.length <= 4) ? ann.label : ann.label[0])
+          : getLbl();
         renderLetterBtn(ctx, left, top);
       };
     }
@@ -3113,22 +3229,26 @@
       // 1. Dropped inside a rect — use that rect (also handles switching to a new rect)
       let parentRect = rectContaining(cp.x, cp.y);
 
-      // 2. Outside all rects but already anchored — keep the current anchor rect
+      // 2. Outside all rects but already anchored to a rect — keep the current anchor rect
       if (!parentRect && ann._anchorRect) {
         parentRect = annots.find(a => a.kind === 'rect' && a.id === ann._anchorRect) || null;
       }
 
-      if (!parentRect) {
-        ann._anchorRect = null; ann._anchorPoint = null;
+      if (parentRect) {
+        // Snap to the nearest of the 9 hotpoints on the rect
+        const hp = nearestHotpoint(obj, parentRect.shape);
+        const p  = lblPosForAnchor(parentRect.shape, hp);
+        obj.set({ left: p.x, top: p.y, originX: p.originX });
+        ann._anchorRect  = parentRect.id;
+        ann._anchorPoint = hp;
+        // Clear any line anchor so the two systems don't conflict
+        ann._anchorLine  = null; ann._lineT = null; ann._lineSide = null;
+        cv.renderAll();
         return;
       }
 
-      // Snap to the nearest of the 9 hotpoints on the rect
-      const hp = nearestHotpoint(obj, parentRect.shape);
-      const p  = lblPosForAnchor(parentRect.shape, hp);
-      obj.set({ left: p.x, top: p.y, originX: p.originX });
-      ann._anchorRect  = parentRect.id;
-      ann._anchorPoint = hp;
+      // 3. No rect — try snapping to the nearest line
+      snapBlockToLine(ann);
       cv.renderAll();
     }
 
@@ -3159,6 +3279,107 @@
         if (a.kind !== 'block' || a._anchorRect !== rectAnn.id || !a._anchorPoint) return;
         const p = lblPosForAnchor(rectShape, a._anchorPoint);
         a.shape.set({ left: p.x, top: p.y, originX: p.originX });
+      });
+    }
+
+    // Return canvas-space endpoints of a Fabric Line object.
+    // Uses calcLinePoints() (local space) + the object's full transform matrix.
+    function getLineEndpoints(lineShape) {
+      const p = lineShape.calcLinePoints();
+      const m = lineShape.calcTransformMatrix();
+      const p1 = fabric.util.transformPoint({ x: p.x1, y: p.y1 }, m);
+      const p2 = fabric.util.transformPoint({ x: p.x2, y: p.y2 }, m);
+      return { p1, p2 };
+    }
+
+    // Closest point on segment (x1,y1)→(x2,y2) to point (px,py).
+    // Returns { x, y, t } where t ∈ [0,1] is the parametric position.
+    function closestPointOnSegment(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq === 0) return { x: x1, y: y1, t: 0 };
+      const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+      return { x: x1 + t * dx, y: y1 + t * dy, t };
+    }
+
+    // Place a block label at a perpendicular offset from a point along a line.
+    // Stores _anchorLine / _lineT / _lineSide on the ann object and clears rect anchor.
+    function positionBlockOnLine(ann, lineAnn, t, side) {
+      const { p1, p2 } = getLineEndpoints(lineAnn.shape);
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy) || 1;
+      // Unit normal perpendicular to line direction
+      const nx = -dy / len, ny = dx / len;
+      // Point on the line at parameter t
+      const cx = p1.x + t * dx, cy = p1.y + t * dy;
+      const offset = fontSize / 2 + 4;
+      ann.shape.set({
+        left: cx + nx * offset * side,
+        top:  cy + ny * offset * side,
+        originX: 'center',
+        originY: 'center',
+      });
+      ann._anchorLine  = lineAnn.id;
+      ann._lineT       = t;
+      ann._lineSide    = side;
+      // Clear any rect anchor so the two systems don't conflict
+      ann._anchorRect  = null;
+      ann._anchorPoint = null;
+    }
+
+    // Snap a block label to the nearest point on a nearby line.
+    // Called as fallback from snapBlockToRect when no rect contains the label.
+    const LINE_SNAP_DIST = 60; // pixels — max distance from line to trigger snap
+    function snapBlockToLine(ann) {
+      if (!ann || ann.kind !== 'block') return;
+      const obj = ann.shape;
+      const cp  = obj.getCenterPoint();
+
+      const lines = annots.filter(a => a.kind === 'line' && a.shape);
+      let bestLine = null, bestDist = LINE_SNAP_DIST, bestT = 0.5, bestSide = 1;
+
+      for (const lineAnn of lines) {
+        const { p1, p2 } = getLineEndpoints(lineAnn.shape);
+        const closest = closestPointOnSegment(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y);
+        const d = Math.hypot(cp.x - closest.x, cp.y - closest.y);
+        if (d < bestDist) {
+          bestDist = d;
+          bestLine = lineAnn;
+          bestT    = closest.t;
+          // Cross product sign determines which side of the line the drop is on
+          const ldx = p2.x - p1.x, ldy = p2.y - p1.y;
+          const cross = (cp.x - closest.x) * (-ldy) + (cp.y - closest.y) * ldx;
+          bestSide = cross >= 0 ? 1 : -1;
+        }
+      }
+
+      // No close line found — keep existing anchor (lets the user nudge t along the line)
+      if (!bestLine && ann._anchorLine) {
+        const lineAnn = annots.find(a => a.kind === 'line' && a.id === ann._anchorLine);
+        if (lineAnn) {
+          const { p1, p2 } = getLineEndpoints(lineAnn.shape);
+          const closest = closestPointOnSegment(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y);
+          positionBlockOnLine(ann, lineAnn, closest.t, ann._lineSide);
+          return;
+        }
+      }
+
+      if (!bestLine) {
+        ann._anchorLine = null; ann._lineT = null; ann._lineSide = null;
+        return;
+      }
+
+      positionBlockOnLine(ann, bestLine, bestT, bestSide);
+    }
+
+    // Reposition all block labels anchored to a line (called on line move/scale/rotate)
+    function glueAnchoredBlocksToLine(lineShape) {
+      if (anchorMode !== 'anchor') return;
+      const lineAnn = annots.find(a => a.shape === lineShape);
+      if (!lineAnn) return;
+      annots.forEach(a => {
+        if (a.kind !== 'block' || a._anchorLine !== lineAnn.id) return;
+        positionBlockOnLine(a, lineAnn, a._lineT, a._lineSide);
       });
     }
 
@@ -3194,6 +3415,10 @@
       popup.style.left = (mouseEvt.clientX + 8) + 'px';
       popup.style.top = (mouseEvt.clientY - 16) + 'px';
       popup.classList.add('open');
+      // Show anchor/freeform buttons for block and labeled-rect kinds
+      const showAnchor = ann.kind === 'block' || ann.kind === 'rect';
+      document.getElementById('popup-anchor-row').classList.toggle('visible', showAnchor);
+      syncPopupAnchorBtns();
       inp.focus(); inp.select();
     }
 
@@ -3326,34 +3551,32 @@
       const selObj  = cv && cv.getActiveObject();
       const selKind = (selObj && !selObj._bg) ? selObj._kind : null;
 
-      let greyStroke, greyTextSize, greyBlock;
+      let greyStroke, greyTextSize;
 
       if (tool === 'select') {
         // In select mode the selected object's kind drives everything.
         // Nothing selected → all sections available.
         switch (selKind) {
           case 'line':
-            greyStroke = false; greyTextSize = true;  greyBlock = true;  break;
+            greyStroke = false; greyTextSize = true;  break;
           case 'text':
-            greyStroke = true;  greyTextSize = false; greyBlock = true;  break;
+            greyStroke = true;  greyTextSize = false; break;
           case 'block':
-            greyStroke = true;  greyTextSize = false; greyBlock = false; break;
+            greyStroke = true;  greyTextSize = false; break;
           case 'rect':
           case 'lbl':
-            greyStroke = true;  greyTextSize = false; greyBlock = false; break;
+            greyStroke = true;  greyTextSize = false; break;
           default: // nothing selected
-            greyStroke = false; greyTextSize = false; greyBlock = false;
+            greyStroke = false; greyTextSize = false;
         }
       } else {
         // Drawing-tool mode: the active tool drives the greying.
         greyStroke   = (tool === 'block') || (tool === 'text');
         greyTextSize = (tool === 'line');
-        greyBlock    = (tool === 'line')  || (tool === 'text');
       }
 
       document.getElementById('section-linestyle').classList.toggle('greyed', greyStroke);
       document.getElementById('section-textsize').classList.toggle('greyed', greyTextSize);
-      document.getElementById('section-labelpos').classList.toggle('greyed', greyBlock);
     }
 
     // ═══════════════════════════════════════════════════════
