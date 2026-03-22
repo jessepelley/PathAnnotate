@@ -2123,6 +2123,10 @@
       if (this._arrowEnd)   drawLineArrowhead(ctx, p.x1, p.y1, p.x2, p.y2, sw, c);
       if (this._arrowStart) drawLineArrowhead(ctx, p.x2, p.y2, p.x1, p.y1, sw, c);
     };
+    // Disable object-level render caching for all Lines so the patched _render
+    // (which draws arrowheads based on _arrowStart/_arrowEnd) is called every frame.
+    // Without this, Fabric v7's cache reuses the no-arrowhead render even after toggling.
+    fabric.Line.prototype.objectCaching = false;
 
     function applyFabricTheme() {
       if (!cv) return;
@@ -2263,7 +2267,7 @@
 
         const area = document.getElementById('canvas-area');
         const maxW = area.clientWidth - 40, maxH = area.clientHeight - 40;
-        const sc = Math.min(maxW / img.width, maxH / img.height, 1);
+        const sc = Math.min(maxW / img.width, maxH / img.height); // fill viewport; no 1x cap
         const W = Math.round(img.width * sc), H = Math.round(img.height * sc);
 
         if (!cv) {
@@ -2283,13 +2287,23 @@
         refreshList(); refreshCount(); syncHistBtns();
 
         FabricImage.fromURL(dataURL).then(fImg => {
-          fImg.scaleToWidth(W); fImg.scaleToHeight(H);
+          fImg.scaleToWidth(W);
           lockBg(fImg);
           cv.add(fImg);
           cv.sendToBack(fImg);
           cv.renderAll();
           pushHist();
           if (afterCb) afterCb();
+        });
+
+        // Vertically center the canvas in the viewport on initial load
+        requestAnimationFrame(() => {
+          const wrapperH = document.getElementById('canvas-wrapper').offsetHeight;
+          const areaH = area.clientHeight;
+          if (wrapperH > 0 && areaH > wrapperH) {
+            document.getElementById('canvas-wrapper').style.marginTop =
+              Math.round((areaH - wrapperH) / 2) + 'px';
+          }
         });
 
         if (name) {
@@ -2848,6 +2862,7 @@
               _arrowStart: next === 'start' || next === 'both',
               _arrowEnd:   next === 'end'   || next === 'both',
             });
+            obj.dirty = true; // invalidate render cache so patched _render sees new arrow state
             cv.renderAll();
             pushHist();
             return true;
@@ -2956,7 +2971,7 @@
           }
         }
       }
-      cv.renderAll();
+      cv.requestRenderAll();
     }
 
     function duplicateAnnotation(obj, direction) {
@@ -3069,7 +3084,7 @@
         const p = lblPos(shape);
         a.lbl.set({ left: p.x, top: p.y, originX: p.originX });
       }
-      cv.renderAll();
+      cv.requestRenderAll();
     }
 
     // Returns the rect annotation that contains point (px, py), or null.
@@ -3300,7 +3315,7 @@
         obj.selectable = sel || alwaysSel;
         obj.evented = sel || alwaysSel;
       });
-      if (!sel) cv.discardActiveObject();
+      cv.discardActiveObject(); // always clear on tool switch to prevent stale transform state
       cv.getObjects().forEach(obj => obj.setCoords()); // refresh all hit-detection coords (Fabric v7)
       cv.renderAll();
     }
