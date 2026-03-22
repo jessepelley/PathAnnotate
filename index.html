@@ -653,7 +653,12 @@
         linear-gradient(90deg, var(--grid) 1px, transparent 1px);
       background-size: 40px 40px;
       transition: background .2s;
-      cursor: default
+      cursor: default;
+      display: flex;
+      align-items: safe center;
+      justify-content: safe center;
+      padding: 20px;
+      box-sizing: border-box
     }
 
     .drop-zone {
@@ -706,7 +711,7 @@
 
     #canvas-wrapper {
       display: none;
-      margin: 20px auto
+      flex-shrink: 0
     }
 
     #main-canvas {
@@ -2052,7 +2057,7 @@
       }
       cv.getObjects().filter(o => o._bg).forEach(o => cv.remove(o));
       FabricImage.fromURL(dataURL).then(fImg => {
-        fImg.scaleToWidth(cv.width); fImg.scaleToHeight(cv.height);
+        fImg.scaleToWidth(cv.width);
         lockBg(fImg);
         cv.add(fImg);
         cv.sendToBack(fImg);
@@ -2294,16 +2299,6 @@
           cv.renderAll();
           pushHist();
           if (afterCb) afterCb();
-        });
-
-        // Vertically center the canvas in the viewport on initial load
-        requestAnimationFrame(() => {
-          const wrapperH = document.getElementById('canvas-wrapper').offsetHeight;
-          const areaH = area.clientHeight;
-          if (wrapperH > 0 && areaH > wrapperH) {
-            document.getElementById('canvas-wrapper').style.marginTop =
-              Math.round((areaH - wrapperH) / 2) + 'px';
-          }
         });
 
         if (name) {
@@ -2606,10 +2601,17 @@
           if (a) snapBlockToRect(a);
         }
         // Auto-elevate the moved object so it visually sits on top of peers.
-        // Title and legend are always kept above everything by elevateSpecialObjects.
+        // MUST be deferred: in Fabric v7, bringToFront() calls remove()+add() internally,
+        // which fires object:removed/added events and clears _activeObject. Calling it
+        // synchronously inside object:modified (which fires before _currentTransform is
+        // cleared) corrupts Fabric's transform state and causes objects to stick to the mouse.
         if (obj && !obj._bg && !obj.isTitle && !obj.isLegend) {
-          cv.bringToFront(obj);
-          elevateSpecialObjects();
+          setTimeout(() => {
+            if (!cv) return;
+            cv.bringToFront(obj);
+            elevateSpecialObjects();
+            cv.requestRenderAll();
+          }, 0);
         }
         if (obj && obj._kind === 'rect') updateOverlapClips();
         pushHist();
@@ -4247,7 +4249,7 @@
           const hasBg = cv.getObjects().some(o => o._bg);
           if (!hasBg) {
             FabricImage.fromURL(useDataURL).then(fImg => {
-              fImg.scaleToWidth(cv.width); fImg.scaleToHeight(cv.height);
+              fImg.scaleToWidth(cv.width);
               lockBg(fImg);
               cv.add(fImg);
               cv.sendToBack(fImg);
