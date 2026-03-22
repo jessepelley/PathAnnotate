@@ -2632,6 +2632,12 @@
           const a = annots.find(a => a.shape === obj);
           if (a) snapBlockToRect(a);
         }
+        // Auto-elevate the moved object so it visually sits on top of peers.
+        // Title and legend are always kept above everything by elevateSpecialObjects.
+        if (obj && !obj._bg && !obj.isTitle && !obj.isLegend) {
+          cv.bringToFront(obj);
+          elevateSpecialObjects();
+        }
         if (obj && obj._kind === 'rect') updateOverlapClips();
         pushHist();
       });
@@ -2765,35 +2771,6 @@
         render: renderCopyBtn,
         cornerSize: cs,
       });
-      // z-controls (Bring to Front / Send to Back) flanking the rotation handle.
-      // Applied to every annotation kind; title/legend are always kept on top after each action.
-      const zCtrl = (offsetX, symbol, actionFn, tipKey) => new fabric.Control({
-        x: 0, y: -0.5, offsetX, offsetY: -40,
-        cursorStyle: 'pointer',
-        cornerSize: 20,
-        mouseUpHandler(evtData, transform) { actionFn(transform.target); return true; },
-        render(ctx, left, top, styleOverride, fabricObject) {
-          const size = (fabricObject && fabricObject.cornerSize) || 13;
-          const half = size / 2;
-          ctx.save();
-          ctx.fillStyle   = (fabricObject && fabricObject.cornerColor) || 'rgba(255,255,255,0.92)';
-          ctx.strokeStyle = (fabricObject && fabricObject.cornerStrokeColor) || 'rgba(0,0,0,0.25)';
-          ctx.lineWidth   = 1;
-          ctx.fillRect(left - half, top - half, size, size);
-          ctx.strokeRect(left - half, top - half, size, size);
-          ctx.fillStyle    = 'rgba(0,0,0,0.72)';
-          ctx.font         = `bold ${Math.round(size * 0.85)}px sans-serif`;
-          ctx.textAlign    = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(symbol, left, top + 0.5);
-          ctx.restore();
-        },
-        _zTip: tipKey,
-      });
-      const makeZ = () => ({
-        sendToBack:   zCtrl(-35, '↺', t => { cv.sendToBack(t);   elevateSpecialObjects(); updateOverlapClips(); }, 'Send to Back'),
-        bringToFront: zCtrl( 35, '↻', t => { cv.bringToFront(t); elevateSpecialObjects(); updateOverlapClips(); }, 'Bring to Front'),
-      });
 
       if (obj._kind === 'line') {
         // For lines, replace ALL standard handles with endpoint controls + copy buttons.
@@ -2891,8 +2868,8 @@
           actionName: 'arrowCycle',
         });
 
-        // Replace controls entirely: no scale/rotate handles, only endpoints + copy + z.
-        obj.controls = Object.assign({
+        // Replace controls entirely: no scale/rotate handles, only endpoints + copy.
+        obj.controls = {
           p1: makeEndpoint(true),
           p2: makeEndpoint(false),
           arrowHead: arrowCtrl,
@@ -2900,18 +2877,15 @@
           copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
           copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
           copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
-        }, makeZ());
+        };
       } else if (obj._kind === 'rect') {
-        // Rect: keep all standard handles + copy buttons + z controls.
+        // Rect: keep all standard handles + copy buttons.
         obj.controls = Object.assign({}, obj.controls, {
           copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
           copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
           copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
           copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
-        }, makeZ());
-      } else {
-        // text / block / lbl: keep standard handles, add only z controls.
-        obj.controls = Object.assign({}, obj.controls, makeZ());
+        });
       }
     }
 
