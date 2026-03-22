@@ -4084,13 +4084,22 @@
     }
 
     function snapMeta() {
-      return annots.map(a => ({ id: a.id, color: a.color, label: a.label, kind: a.kind, notes: a.notes || '' }));
+      return annots.map(a => ({
+        id: a.id, color: a.color, label: a.label, kind: a.kind, notes: a.notes || '',
+        noBlock:      a.noBlock      || false,
+        _anchorRect:  a._anchorRect  || null,
+        _anchorPoint: a._anchorPoint || null,
+        _anchorLine:  a._anchorLine  || null,
+        _lineT:       a._lineT  != null ? a._lineT  : null,
+        _lineSide:    a._lineSide != null ? a._lineSide : null,
+        _freeOffset:  a._freeOffset  || null,
+      }));
     }
 
     function pushHist() {
       if (histLock || !cv) return;
       undoStack.push({
-        json: cv.toJSON(JSON_PROPS),  // keep bg in undo history (stays in-memory)
+        json: getCanvasJSON(),  // bg-stripped; re-added from imgDataURL on restore (smaller snapshots)
         meta: snapMeta(),
         lbl: getLbl(),
         annId,
@@ -4136,35 +4145,64 @@
 
     function applySnap(snap) {
       histLock = true;
+      // Clear stale object references before loading — old Fabric objects will be
+      // replaced by new ones created by loadFromJSON.
+      lastElevatedRect = null;
+      lastSelectedAnn  = null;
+
       cv.loadFromJSON(snap.json).then(() => {
-        cv.renderAll();
-        // Re-lock bg objects and re-attach copy controls to annotations
-        cv.getObjects().forEach(obj => {
-          if (obj._bg) lockBg(obj);
-          else addCopyControls(obj);
-        });
+        // snap.json has the bg stripped (getCanvasJSON). Re-add it from imgDataURL
+        // so it is always freshly created and locked — avoids _bg property round-trip
+        // issues that can leave the background selectable/moveable after undo.
+        const finishApply = () => {
+          cv.renderAll();
+          cv.getObjects().forEach(obj => {
+            if (obj._bg) lockBg(obj);
+            else addCopyControls(obj);
+          });
 
-        // Rebuild annots references
-        const byId = {}, lblById = {};
-        cv.getObjects().forEach(obj => {
-          if (obj._kind === 'rect' || obj._kind === 'line' || obj._kind === 'text' || obj._kind === 'block') byId[obj._annId] = obj;
-          if (obj._kind === 'lbl') lblById[obj._annId] = obj;
-        });
-        annots = snap.meta.map(m => ({
-          id: m.id, color: m.color, label: m.label, kind: m.kind,
-          notes: m.notes || '',
-          shape: byId[m.id] || null, lbl: lblById[m.id] || null,
-        })).filter(a => a.shape);
+          // Rebuild annots with full state including anchor bindings
+          const byId = {}, lblById = {};
+          cv.getObjects().forEach(obj => {
+            if (obj._kind === 'rect' || obj._kind === 'line' || obj._kind === 'text' || obj._kind === 'block') byId[obj._annId] = obj;
+            if (obj._kind === 'lbl') lblById[obj._annId] = obj;
+          });
+          annots = snap.meta.map(m => ({
+            id: m.id, color: m.color, label: m.label, kind: m.kind,
+            notes: m.notes || '',
+            noBlock:      m.noBlock      || false,
+            _anchorRect:  m._anchorRect  || null,
+            _anchorPoint: m._anchorPoint || null,
+            _anchorLine:  m._anchorLine  || null,
+            _lineT:       m._lineT  != null ? m._lineT  : null,
+            _lineSide:    m._lineSide != null ? m._lineSide : null,
+            _freeOffset:  m._freeOffset  || null,
+            shape: byId[m.id] || null, lbl: lblById[m.id] || null,
+          })).filter(a => a.shape);
 
-        annId = snap.annId;
-        setLbl(snap.lbl);
-        selectedIds.clear();
-        refreshList(); refreshCount();
-        histLock = false;
-        syncHistBtns();
-        setTool(tool);
-        elevateSpecialObjects();
-        updateOverlapClips();
+          annId = snap.annId;
+          setLbl(snap.lbl);
+          selectedIds.clear();
+          refreshList(); refreshCount();
+          histLock = false;
+          syncHistBtns();
+          setTool(tool);
+          elevateSpecialObjects();
+          updateOverlapClips();
+        };
+
+        // Re-add background image if absent (snap.json has bg stripped)
+        if (imgDataURL && !cv.getObjects().some(o => o._bg)) {
+          FabricImage.fromURL(imgDataURL).then(fImg => {
+            fImg.scaleToWidth(baseW);
+            lockBg(fImg);
+            cv.add(fImg);
+            cv.sendObjectToBack(fImg);
+            finishApply();
+          });
+        } else {
+          finishApply();
+        }
       });
     }
 
