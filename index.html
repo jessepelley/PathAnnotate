@@ -1725,6 +1725,7 @@
     let isPanning = false;
     let panStart = { x: 0, y: 0, scrollX: 0, scrollY: 0 };
     let lastSelectedAnn = null; // most recently selected annotation (for right-click paste)
+    let _bringToFrontPending = false; // guards re-entry in selection handlers after bringToFront
 
     let undoStack = [], redoStack = [], histLock = false;
     let imgDataURL = null;
@@ -1998,39 +1999,32 @@
     }
 
     function autoInc(used) {
-      // Build the set of every individual block value already in the key
-      const taken = new Set();
+      // Counter advances to max+1, not first gap.
+      // Intentionally skipped labels remain gaps (visible as ⚠ warnings in the block
+      // key) but the counter never back-fills them automatically.
+      const isAlpha = /[A-Za-z]/.test(used);
+      let maxV = 0;
+
       getBlockAnnotations().forEach(a => {
         const lbl = (a.kind === 'text' || a.kind === 'block')
           ? ((a.shape && a.shape.text) || a.label || '').trim()
           : (a.label || '').trim();
-        expandBlockLabel(lbl).forEach(v => taken.add(v));
+        expandBlockLabel(lbl).forEach(v => {
+          if (isAlpha) {
+            const n = alphaVal(v);
+            if (n > maxV) maxV = n;
+          } else {
+            const n = parseInt(v, 10);
+            if (!isNaN(n) && n > maxV) maxV = n;
+          }
+        });
       });
 
-      // Determine alpha vs numeric from the label that was just used
-      const isAlpha = /[A-Za-z]/.test(used);
-
-      // Scan the sequence from its natural start (A / 1) and return the first gap
-      const MAX = 10000;
       if (isAlpha) {
-        for (let i = 1; i <= MAX; i++) {
-          const c = alphaFromVal(i, true);
-          if (!taken.has(c)) { setLbl(c); return; }
-        }
+        setLbl(alphaFromVal(maxV + 1, true));
       } else {
-        for (let i = 1; i <= MAX; i++) {
-          if (!taken.has(String(i))) { setLbl(String(i)); return; }
-        }
+        setLbl(String(maxV + 1));
       }
-
-      // Absolute fallback — only reached if MAX is exhausted (practically impossible)
-      const rm = used.match(/^(\d+)-(\d+)$/);
-      if (rm) { setLbl(String(+rm[2] + 1)); return; }
-      const nm = used.match(/^(\d+)$/);
-      if (nm) { setLbl(String(+nm[1] + 1)); return; }
-      const am = used.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
-      if (am) { setLbl(nextAlpha(am[2])); return; }
-      if (/^[A-Za-z]+$/.test(used)) { setLbl(nextAlpha(used)); return; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -2441,9 +2435,10 @@
         const p = opt.scenePoint;
 
         if (tool === 'block') {
-          // Place block label at click position WITHOUT entering edit mode
+          // Place block label at click position; editing is via double-click popup,
+          // not inline (use fabric.Text so Fabric's IText editor never intercepts).
           const lbl = getLbl();
-          const txt = new fabric.IText(lbl, {
+          const txt = new fabric.Text(lbl, {
             left: p.x, top: p.y,
             originX: 'left', originY: 'top',
             fontSize,
@@ -2460,13 +2455,8 @@
           cv.renderAll();
           const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
           annots.push(ann);
-          // Immediately advance the counter so the next placement gets the next letter.
+          // Advance the counter so the next placement gets the next label.
           autoInc(lbl);
-          txt.on('editing:exited', () => {
-            txtEditJustExited = true;
-            ann.label = txt.text.trim() || ann.label;
-            refreshList(); refreshCount(); pushHist();
-          });
           // If anchor mode is on, snap the block label to the nearest hotpoint
           // of any rectangle it was placed inside.
           if (anchorMode === 'anchor') snapBlockToRect(ann);
@@ -2594,6 +2584,32 @@
         activeObj = null;
       });
 
+      // Bring a selected rect to the front so the selected object always renders above
+      // sibling rects and overlap-clipping reflects the new z-order.
+      // Must be deferred (setTimeout 0) because bringToFront() removes+re-adds the object
+      // internally, which clears _activeObject; we re-select it afterward.
+      // The _bringToFrontPending flag prevents the programmatic re-selection from triggering
+      // another bringToFront cycle.
+      function _bringSelectedRectToFront(obj) {
+        if (_bringToFrontPending || !obj || obj._bg || obj.isTitle || obj.isLegend) return;
+        if (obj._kind !== 'rect') return;
+        // Skip if already at the front (just before any special objects)
+        const objs = cv.getObjects();
+        const myIdx = objs.indexOf(obj);
+        const frontIdx = objs.reduce((hi, o, i) => (!o._bg && !o.isTitle && !o.isLegend ? i : hi), -1);
+        if (myIdx === frontIdx) return;
+        _bringToFrontPending = true;
+        setTimeout(() => {
+          if (!cv) { _bringToFrontPending = false; return; }
+          cv.bringToFront(obj);
+          elevateSpecialObjects();
+          updateOverlapClips();
+          cv.setActiveObject(obj);
+          _bringToFrontPending = false;
+          cv.requestRenderAll();
+        }, 0);
+      }
+
       cv.on('selection:created', opt => {
         const obj = cv.getActiveObject();
         if (obj && !obj._bg) {
@@ -2606,6 +2622,7 @@
             refreshList();
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
+            _bringSelectedRectToFront(obj);
             return; // refreshList already called syncSidebar via re-render
           }
         }
@@ -2624,6 +2641,7 @@
             refreshList();
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
+            _bringSelectedRectToFront(obj);
             syncSidebar();
             return;
           }
@@ -2736,13 +2754,18 @@
         if (!obj || obj._bg) return;
         // Double-clicking a title object opens the title modal instead of inline editing
         if (obj.isTitle) { openTitle(); return; }
-        // Native IText editing — covers text labels AND legend IText objects
-        if (obj.type === 'i-text') { obj.enterEditing(); return; }
+        // Native IText editing covers free-form text labels and legend IText objects,
+        // but NOT block-kind objects — those use the popup regardless of IText type
+        // (old sessions saved blocks as IText; ensure they route to the popup too).
+        if (obj.type === 'i-text') {
+          const aKind = annots.find(a => a.shape === obj);
+          if (!aKind || aKind.kind !== 'block') { obj.enterEditing(); return; }
+          // Block IText from an old session — exit inline editing, fall through to popup
+          if (obj.isEditing) obj.exitEditing();
+        }
         const a = annots.find(a => a.shape === obj || a.lbl === obj);
         if (!a) return;
-        // Double-clicking a line opens the text label popup (defaulting to "Label")
-        //if (a.kind === 'line') { openLineLabel(a, opt.e); return; }
-        if (a.kind === 'line') {return; } // lines should not have labels
+        if (a.kind === 'line') { return; } // lines have no text labels
         openEdit(a, opt.e);
       });
 
