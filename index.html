@@ -2747,14 +2747,13 @@
       ctx.translate(left, top);
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
-      // colour is set before this call via _letterBtnHasLabel flag on the object
       ctx.fillStyle = ctx._letterActive ? '#4caf50' : '#607d8b';
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 9px DM Mono, monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(ctx._letterActive ? ctx._letterText : 'A+', 0, 1);
+      ctx.fillText(ctx._letterText, 0, 1);
       ctx.restore();
     }
 
@@ -2763,7 +2762,10 @@
       return function(ctx, left, top, styleOverride, target) {
         const ann = annots.find(a => a.shape === fabricObj);
         ctx._letterActive = !!(ann && ann.lbl);
-        ctx._letterText   = (ann && ann.label && ann.label.length <= 4) ? ann.label : (ann && ann.label ? ann.label[0] : 'A');
+        // Active: show the assigned label. Inactive: show the next label that will be assigned.
+        ctx._letterText = ctx._letterActive
+          ? ((ann.label && ann.label.length <= 4) ? ann.label : ann.label[0])
+          : getLbl();
         renderLetterBtn(ctx, left, top);
       };
     }
