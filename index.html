@@ -45,7 +45,7 @@
     "url": "https://pathannotate.app",
     "applicationCategory": "MedicalApplication",
     "operatingSystem": "Web",
-    "softwareVersion": "1.3.0",
+    "softwareVersion": "2.0.0",
     "description": "PathAnnotate is a lightweight web app for annotating gross pathology specimens. Draw rectangles, lines, and block labels, save sessions, and export annotated images.",
     "offers": {
       "@type": "Offer",
@@ -1201,6 +1201,182 @@
       transition: color .15s
     }
 
+    /* INTRO MODAL */
+    .intro-bg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.75);
+      z-index: 400;
+      align-items: center;
+      justify-content: center
+    }
+    .intro-bg.open { display: flex }
+    .intro-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 520px;
+      max-width: 95vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+    .intro-pages {
+      flex: 1;
+      overflow: hidden;
+      position: relative
+    }
+    .intro-page {
+      display: none;
+      padding: 28px 28px 8px;
+      flex-direction: column;
+      gap: 14px
+    }
+    .intro-page.active { display: flex }
+    .intro-page h2 {
+      font-size: 17px;
+      font-weight: 500;
+      color: var(--text);
+      margin: 0
+    }
+    .intro-page h2 span {
+      color: var(--accent)
+    }
+    .intro-page p {
+      font-size: 12px;
+      line-height: 1.65;
+      color: var(--muted);
+      margin: 0
+    }
+    .intro-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 10px
+    }
+    .intro-step {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start
+    }
+    .intro-step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #000;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px
+    }
+    .intro-step-body {
+      flex: 1
+    }
+    .intro-step-body strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 2px
+    }
+    .intro-step-body span {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5
+    }
+    .intro-kbd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px
+    }
+    .intro-kbd-table td {
+      padding: 4px 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border)
+    }
+    .intro-kbd-table tr:last-child td { border-bottom: none }
+    .intro-kbd-table td:first-child {
+      width: 44%;
+      padding-right: 10px
+    }
+    .intro-kbd {
+      display: inline-block;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--text)
+    }
+    .intro-tips {
+      display: flex;
+      flex-direction: column;
+      gap: 8px
+    }
+    .intro-tip {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+      padding-left: 14px;
+      position: relative
+    }
+    .intro-tip::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: var(--accent)
+    }
+    .intro-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      border-top: 1px solid var(--border)
+    }
+    .intro-dots {
+      display: flex;
+      gap: 6px;
+      align-items: center
+    }
+    .intro-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+      cursor: pointer;
+      transition: background .2s
+    }
+    .intro-dot.active { background: var(--accent) }
+    .intro-nav {
+      display: flex;
+      gap: 7px
+    }
+    .intro-btn {
+      padding: 7px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      background: transparent;
+      color: var(--text);
+      transition: background .15s
+    }
+    .intro-btn:hover { background: var(--bg) }
+    .intro-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #000;
+      font-weight: 500
+    }
+    .intro-btn.primary:hover { filter: brightness(1.1) }
+
     .privacy-link:hover { color: var(--accent) }
 
     .leg-preview {
@@ -1499,6 +1675,7 @@
       title="View changelog">PATHANNOTATE</button>
       <button class="privacy-link" onclick="document.getElementById('privacy-modal').classList.add('open')"
         title="Privacy policy">Privacy Policy</button>
+      <button class="privacy-link" onclick="openIntro()" title="Help / Introduction">?</button>
   </div>
 
   <!-- Inline label editor -->
@@ -1626,6 +1803,19 @@
            style="color:var(--accent);text-decoration:none">github.com/PathAnnotate/PathAnnotate</a>
       </p>
       <div style="font-family:'DM Mono',monospace;font-size:11px;line-height:1.7">
+        <div style="color:var(--accent);margin-bottom:4px">v2.0.0</div>
+        <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
+          <li>Custom colour picker (+ swatch) in colour row</li>
+          <li>Anchor / Freeform toggle moved into double-click edit popup</li>
+          <li>Block labels open popup editor (consistent with labelled rectangles)</li>
+          <li>Block counter advances to max+1; intentional skips no longer interrupted</li>
+          <li>Overlap clipping: front rectangle always shows full border over back rectangle</li>
+          <li>Z-order persists after deselection via lastElevatedRect clip logic</li>
+          <li>Adjacent rectangles created with + share a single perfect edge (cassette model)</li>
+          <li>Block labels snap to line endpoints with magnetic pull zone</li>
+          <li>Line drawing snaps tip to nearby existing line endpoints</li>
+          <li>Undo/redo: background no longer becomes selectable after undo; anchor state preserved</li>
+        </ul>
         <div style="color:var(--accent);margin-bottom:4px">v1.3.0</div>
         <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
           <li>Upgraded to Fabric.js v7 (async API, renamed classes, origin defaults)</li>
@@ -1658,6 +1848,105 @@
     </div>
   </div>
 
+  <!-- Intro / onboarding modal -->
+  <div class="intro-bg" id="intro-modal">
+    <div class="intro-modal">
+      <div class="intro-pages">
+
+        <!-- Page 1: Welcome -->
+        <div class="intro-page active" id="intro-p1">
+          <h2>Welcome to <span>PathAnnotate</span></h2>
+          <p>
+            A lightweight gross pathology specimen annotation tool that runs entirely in your browser.
+            Draw rectangles, lines, and block labels over your specimen photos and generate a formatted block key for your dictation.
+          </p>
+          <p style="font-size:11px;padding:10px 12px;background:var(--bg);border-radius:7px;border:1px solid var(--border);color:var(--muted)">
+            <strong style="color:var(--text);display:block;margin-bottom:3px">Your data stays on your device.</strong>
+            No images or annotations are ever uploaded or transmitted anywhere.
+            Everything is stored locally in your browser.
+          </p>
+          <p style="font-size:11px;color:var(--muted)">This guide will walk you through the basic workflow. You can reopen it any time from the <strong style="color:var(--text)">?</strong> button in the top bar.</p>
+        </div>
+
+        <!-- Page 2: Workflow -->
+        <div class="intro-page" id="intro-p2">
+          <h2>Getting Started</h2>
+          <div class="intro-steps">
+            <div class="intro-step">
+              <div class="intro-step-num">1</div>
+              <div class="intro-step-body">
+                <strong>Import a photo</strong>
+                <span>Click <em>Import Photo</em> or drag and drop an image onto the canvas.</span>
+              </div>
+            </div>
+            <div class="intro-step">
+              <div class="intro-step-num">2</div>
+              <div class="intro-step-body">
+                <strong>Set the specimen title</strong>
+                <span>Click <em>Set Title</em> to enter a case number and specimen (e.g. <em>2 Left Kidney</em>). The block counter auto-configures — numeric specimens use A, B, C… and alpha specimens use 1, 2, 3…</span>
+              </div>
+            </div>
+            <div class="intro-step">
+              <div class="intro-step-num">3</div>
+              <div class="intro-step-body">
+                <strong>Draw rectangles over tissue blocks</strong>
+                <span>Use the <em>Rectangle</em> tool (R) to outline each submitted block. Click the letter button (⊞) on a rectangle to assign the next sequential block label.</span>
+              </div>
+            </div>
+            <div class="intro-step">
+              <div class="intro-step-num">4</div>
+              <div class="intro-step-body">
+                <strong>Build the block key</strong>
+                <span>Add notes for each block in the Block Key panel on the right. Click <em>Copy</em> to copy the formatted key to your clipboard for quick import into a dictation.</span>
+              </div>
+            </div>
+            <div class="intro-step">
+              <div class="intro-step-num">5</div>
+              <div class="intro-step-body">
+                <strong>Export or save</strong>
+                <span>Click <em>Export Photo</em> to save the annotated image, or <em>Save</em> to save a session file you can reload later.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Page 3: Tools & Tips -->
+        <div class="intro-page" id="intro-p3">
+          <h2>Tools &amp; Shortcuts</h2>
+          <table class="intro-kbd-table">
+            <tr><td><span class="intro-kbd">R</span> Rectangle</td><td>Draw a block outline</td></tr>
+            <tr><td><span class="intro-kbd">E</span> Line</td><td>Draw a margin or incision line</td></tr>
+            <tr><td><span class="intro-kbd">B</span> Block label</td><td>Place a floating block letter</td></tr>
+            <tr><td><span class="intro-kbd">T</span> Text</td><td>Place free text anywhere</td></tr>
+            <tr><td><span class="intro-kbd">S</span> Select</td><td>Move, resize, or delete objects</td></tr>
+            <tr><td><span class="intro-kbd">Double-click</span></td><td>Edit label or block text</td></tr>
+            <tr><td><span class="intro-kbd">Del</span></td><td>Delete selected object</td></tr>
+            <tr><td><span class="intro-kbd">Ctrl Z</span> / <span class="intro-kbd">Ctrl Y</span></td><td>Undo / Redo</td></tr>
+            <tr><td><span class="intro-kbd">Right-click</span></td><td>Paste last annotation at cursor</td></tr>
+          </table>
+          <div class="intro-tips">
+            <div class="intro-tip">Use the <strong>+</strong> arrows on a selected rectangle to create an adjacent block that shares a perfect edge — ideal for representing sequential tissue sections.</div>
+            <div class="intro-tip">Block labels snap to nearby rectangle hotpoints and line endpoints in <strong>Anchor</strong> mode. Switch to <strong>Freeform</strong> to drag them anywhere.</div>
+            <div class="intro-tip">When drawing a new line, the endpoint snaps to existing line endpoints — making it easy to chain connected lines.</div>
+          </div>
+        </div>
+
+      </div><!-- /intro-pages -->
+
+      <div class="intro-footer">
+        <div class="intro-dots" id="intro-dots">
+          <div class="intro-dot active" onclick="introGoTo(0)"></div>
+          <div class="intro-dot" onclick="introGoTo(1)"></div>
+          <div class="intro-dot" onclick="introGoTo(2)"></div>
+        </div>
+        <div class="intro-nav">
+          <button class="intro-btn" id="intro-prev" onclick="introStep(-1)">Back</button>
+          <button class="intro-btn primary" id="intro-next" onclick="introStep(1)">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <input type="file" id="file-input" accept="image/*">
   <input type="file" id="json-input" accept=".json">
 
@@ -1666,9 +1955,55 @@
     // ═══════════════════════════════════════════════════════
     //  VERSION
     // ═══════════════════════════════════════════════════════
-    const VERSION = '1.3.0';
+    const VERSION = '2.0.0';
     document.getElementById('logo-ver').textContent = 'v' + VERSION;
     document.getElementById('ver-stat').textContent = 'PathAnnotate v' + VERSION;
+
+    // ═══════════════════════════════════════════════════════
+    //  INTRO MODAL
+    // ═══════════════════════════════════════════════════════
+    const INTRO_KEY = 'pathannotate_intro_v';
+    let introCurrent = 0;
+    const introTotal  = 3;
+
+    function introGoTo(idx) {
+      introCurrent = Math.max(0, Math.min(introTotal - 1, idx));
+      document.querySelectorAll('.intro-page').forEach((p, i) =>
+        p.classList.toggle('active', i === introCurrent));
+      document.querySelectorAll('#intro-dots .intro-dot').forEach((d, i) =>
+        d.classList.toggle('active', i === introCurrent));
+      document.getElementById('intro-prev').style.visibility =
+        introCurrent === 0 ? 'hidden' : 'visible';
+      const nextBtn = document.getElementById('intro-next');
+      if (introCurrent === introTotal - 1) {
+        nextBtn.textContent = 'Get Started';
+      } else {
+        nextBtn.textContent = 'Next';
+      }
+    }
+
+    function introStep(delta) {
+      if (introCurrent === introTotal - 1 && delta > 0) {
+        closeIntro();
+      } else {
+        introGoTo(introCurrent + delta);
+      }
+    }
+
+    function closeIntro() {
+      document.getElementById('intro-modal').classList.remove('open');
+      try { localStorage.setItem(INTRO_KEY, VERSION); } catch (e) {}
+    }
+
+    // Show intro if this version hasn't been seen yet
+    (function checkIntro() {
+      try {
+        if (localStorage.getItem(INTRO_KEY) !== VERSION) {
+          document.getElementById('intro-modal').classList.add('open');
+          introGoTo(0);
+        }
+      } catch (e) {}
+    })();
 
     // Fabric.js v7 renamed some classes; keep aliases so both v5-saved sessions and
     // new objects work regardless of the exact UMD export shape.
@@ -4397,6 +4732,11 @@
       return cn || sp || null;
     }
 
+    function openIntro() {
+      introGoTo(0);
+      document.getElementById('intro-modal').classList.add('open');
+    }
+
     function openTitle() {
       document.getElementById('case-num-input').value = caseNum;
       document.getElementById('specimen-input').value = specimenText;
@@ -4411,6 +4751,9 @@
     });
     document.getElementById('changelog-modal').addEventListener('click', e => {
       if (e.target === e.currentTarget) document.getElementById('changelog-modal').classList.remove('open');
+    });
+    document.getElementById('intro-modal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeIntro();
     });
     // Allow Enter to advance from Case Number to Specimen, then Apply
     document.getElementById('case-num-input').addEventListener('keydown', e => {
@@ -4637,7 +4980,7 @@
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !inInput && !iTextEditing) { e.preventDefault(); pasteFromClipboard(); return; }
 
       if (inInput) return;
-      if (e.key === 'Escape') { closeEdit(); closeLegend(); document.getElementById('privacy-modal').classList.remove('open'); document.getElementById('changelog-modal').classList.remove('open'); if (cv) { cv.discardActiveObject(); cv.renderAll(); } selectedIds.clear(); refreshList(); return; }
+      if (e.key === 'Escape') { closeEdit(); closeLegend(); closeIntro(); document.getElementById('privacy-modal').classList.remove('open'); document.getElementById('changelog-modal').classList.remove('open'); if (cv) { cv.discardActiveObject(); cv.renderAll(); } selectedIds.clear(); refreshList(); return; }
       if (e.key.toLowerCase() === 'r') setTool('rect');
       if (e.key.toLowerCase() === 'e') setTool('line');
       if (e.key.toLowerCase() === 'b') setTool('block');
