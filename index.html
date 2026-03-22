@@ -2535,6 +2535,17 @@
             if (dx >= dy) ey = oy;   // horizontal snap
             else          ex = ox;   // vertical snap
           }
+          // Snap the drawing tip to nearby line endpoints
+          const LINE_DRAW_SNAP = 20;
+          const existingLines = annots.filter(a => a.kind === 'line' && a.shape);
+          outer: for (const la of existingLines) {
+            const { p1, p2 } = getLineEndpoints(la.shape);
+            for (const ep of [p1, p2]) {
+              if (Math.hypot(ex - ep.x, ey - ep.y) < LINE_DRAW_SNAP) {
+                ex = ep.x; ey = ep.y; break outer;
+              }
+            }
+          }
           activeObj.set({ x2: ex, y2: ey });
         }
         cv.renderAll();
@@ -3353,7 +3364,8 @@
 
     // Snap a block label to the nearest point on a nearby line.
     // Called as fallback from snapBlockToRect when no rect contains the label.
-    const LINE_SNAP_DIST = 60; // pixels — max distance from line to trigger snap
+    const LINE_SNAP_DIST = 60;     // pixels — max distance from line body to trigger snap
+    const LINE_END_SNAP  = 35;     // tighter magnetic zone around each endpoint
     function snapBlockToLine(ann) {
       if (!ann || ann.kind !== 'block') return;
       const obj = ann.shape;
@@ -3364,15 +3376,29 @@
 
       for (const lineAnn of lines) {
         const { p1, p2 } = getLineEndpoints(lineAnn.shape);
-        const closest = closestPointOnSegment(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y);
-        const d = Math.hypot(cp.x - closest.x, cp.y - closest.y);
-        if (d < bestDist) {
-          bestDist = d;
+        const ldx = p2.x - p1.x, ldy = p2.y - p1.y;
+
+        // Check endpoints first — give them a magnetic pull if block is within LINE_END_SNAP
+        const dStart = Math.hypot(cp.x - p1.x, cp.y - p1.y);
+        const dEnd   = Math.hypot(cp.x - p2.x, cp.y - p2.y);
+        let snapT, snapD;
+        if (dStart < LINE_END_SNAP && dStart <= dEnd) {
+          snapT = 0; snapD = dStart;
+        } else if (dEnd < LINE_END_SNAP) {
+          snapT = 1; snapD = dEnd;
+        } else {
+          const closest = closestPointOnSegment(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y);
+          snapT = closest.t;
+          snapD = Math.hypot(cp.x - closest.x, cp.y - closest.y);
+        }
+
+        if (snapD < bestDist) {
+          bestDist = snapD;
           bestLine = lineAnn;
-          bestT    = closest.t;
-          // Cross product sign determines which side of the line the drop is on
-          const ldx = p2.x - p1.x, ldy = p2.y - p1.y;
-          const cross = (cp.x - closest.x) * (-ldy) + (cp.y - closest.y) * ldx;
+          bestT    = snapT;
+          // Cross product sign: which side of the line is the drop on?
+          const cx = p1.x + snapT * ldx, cy = p1.y + snapT * ldy;
+          const cross = (cp.x - cx) * (-ldy) + (cp.y - cy) * ldx;
           bestSide = cross >= 0 ? 1 : -1;
         }
       }
