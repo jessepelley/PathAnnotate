@@ -2605,16 +2605,21 @@
         // which fires object:removed/added events and clears _activeObject. Calling it
         // synchronously inside object:modified (which fires before _currentTransform is
         // cleared) corrupts Fabric's transform state and causes objects to stick to the mouse.
+        // updateOverlapClips and pushHist are also deferred so they run AFTER the z-order
+        // change and capture the correct final state.
         if (obj && !obj._bg && !obj.isTitle && !obj.isLegend) {
           setTimeout(() => {
             if (!cv) return;
             cv.bringToFront(obj);
             elevateSpecialObjects();
+            if (obj._kind === 'rect') updateOverlapClips();
             cv.requestRenderAll();
+            pushHist();
           }, 0);
+        } else {
+          if (obj && obj._kind === 'rect') updateOverlapClips();
+          pushHist();
         }
-        if (obj && obj._kind === 'rect') updateOverlapClips();
-        pushHist();
       });
 
       cv.on('mouse:dblclick', opt => {
