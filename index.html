@@ -2139,7 +2139,9 @@
 
       // Custom color picker — a "+" swatch that opens the native color wheel.
       // After picking, the swatch shows the chosen color and becomes the active swatch.
-      const addLabel = document.createElement('label');
+      // Use a <div> with an explicit .click() call rather than <label> wrapping, because
+      // zero-size color inputs are not reliably activated by label clicks in all browsers.
+      const addLabel = document.createElement('div');
       addLabel.className = 'swatch swatch-add';
       addLabel.id = 'swatch-add';
       addLabel.title = 'Custom color…';
@@ -2150,17 +2152,20 @@
       const colorInp = document.createElement('input');
       colorInp.type = 'color';
       colorInp.id = 'custom-color-input';
-      colorInp.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
-      colorInp.addEventListener('input', function () {
+      colorInp.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0';
+      const onColorPick = function () {
         const c = this.value;
         addLabel.style.background = c;
         if (c === '#000000' || c === '#ffffff') addLabel.dataset.border = '1';
         else delete addLabel.dataset.border;
         addLabel.title = c;
         activateSwatch(c, addLabel);
-      });
+      };
+      colorInp.addEventListener('input', onColorPick);
+      colorInp.addEventListener('change', onColorPick); // Safari fires change, not input
 
-      addLabel.appendChild(colorInp);
+      addLabel.addEventListener('click', () => colorInp.click());
+      document.body.appendChild(colorInp); // outside canvas DOM so it never affects layout
       row.appendChild(addLabel);
       customSwatchEl = addLabel;
     })();
@@ -2493,7 +2498,7 @@
         fImg.scaleToWidth(cv.width);
         lockBg(fImg);
         cv.add(fImg);
-        cv.sendToBack(fImg);
+        bgToBack(fImg);
         cv.renderAll();
         pushHist();
       });
@@ -2728,7 +2733,7 @@
           fImg.scaleToWidth(W);
           lockBg(fImg);
           cv.add(fImg);
-          cv.sendToBack(fImg);
+          bgToBack(fImg);
           cv.renderAll();
           pushHist();
           if (afterCb) afterCb();
@@ -3399,6 +3404,13 @@
     function elevateSpecialObjects() {
       if (!cv) return;
       cv.getObjects().filter(o => o.isLegend || o.isTitle).forEach(o => cv.bringToFront(o));
+    }
+
+    // Send an object to z-index 0 (behind all others).
+    // Fabric v7 removed the canvas.sendToBack() alias; manipulate _objects directly.
+    function bgToBack(obj) {
+      const i = cv._objects.indexOf(obj);
+      if (i > 0) { cv._objects.splice(i, 1); cv._objects.unshift(obj); }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -4532,7 +4544,8 @@
             fImg.scaleToWidth(baseW);
             lockBg(fImg);
             cv.add(fImg);
-            cv.sendObjectToBack(fImg);
+            bgToBack(fImg);
+          }).catch(() => {/* bg failed — proceed without it */}).finally(() => {
             finishApply();
           });
         } else {
@@ -4901,7 +4914,7 @@
               fImg.scaleToWidth(cv.width);
               lockBg(fImg);
               cv.add(fImg);
-              cv.sendToBack(fImg);
+              bgToBack(fImg);
               finishLoad();
             });
           } else {
