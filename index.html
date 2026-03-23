@@ -3167,7 +3167,7 @@
         if (obj && !obj._bg && !obj.isTitle && !obj.isLegend) {
           setTimeout(() => {
             if (!cv) return;
-            cv.bringToFront(obj);
+            objToFront(obj);
             elevateSpecialObjects();
             if (obj._kind === 'rect') updateOverlapClips();
             cv.requestRenderAll();
@@ -3517,7 +3517,7 @@
     // Title and legend objects must always render on top of annotations.
     function elevateSpecialObjects() {
       if (!cv) return;
-      cv.getObjects().filter(o => o.isLegend || o.isTitle).forEach(o => cv.bringToFront(o));
+      cv.getObjects().filter(o => o.isLegend || o.isTitle).forEach(o => objToFront(o));
     }
 
     // Send an object to z-index 0 (behind all others).
@@ -3525,6 +3525,13 @@
     function bgToBack(obj) {
       const i = cv._objects.indexOf(obj);
       if (i > 0) { cv._objects.splice(i, 1); cv._objects.unshift(obj); }
+    }
+
+    // Bring an object to the top of the z-stack.
+    // Fabric v7 removed canvas.bringToFront(); use the same _objects pattern as bgToBack.
+    function objToFront(obj) {
+      const i = cv._objects.indexOf(obj);
+      if (i !== -1 && i < cv._objects.length - 1) { cv._objects.splice(i, 1); cv._objects.push(obj); }
     }
 
     // ═══════════════════════════════════════════════════════
