@@ -2601,21 +2601,32 @@
     // Without this, Fabric v7's cache reuses the no-arrowhead render even after toggling.
     fabric.Line.prototype.objectCaching = false;
 
+    // Apply the app's teal/white control theme directly to a Fabric object instance.
+    // Must be per-instance because Fabric v7 class fields create own properties
+    // that shadow any prototype-level assignment.
+    const CTRL_ACCENT = '#00d4b8';
+    function applyCtrlTheme(obj) {
+      obj.borderColor        = CTRL_ACCENT;
+      obj.borderScaleFactor  = 1.5;
+      obj.cornerColor        = '#ffffff';
+      obj.cornerStrokeColor  = CTRL_ACCENT;
+      obj.cornerSize         = 10;
+      obj.transparentCorners = false;
+      obj.padding            = 4;
+    }
+
     function applyFabricTheme() {
       if (!cv) return;
       const accent = '#00d4b8';
       cv.set({
-        selectionColor: 'rgba(0,212,184,0.07)',
+        selectionColor:       'rgba(0,212,184,0.07)',
         selectionBorderColor: accent,
-        selectionLineWidth: 1,
+        selectionLineWidth:   1.5,
       });
-      FabricObject.prototype.set({
-        borderColor: accent,
-        borderScaleFactor: 1.5,
-        cornerColor: '#ffffff',
-        cornerStrokeColor: accent,
-        transparentCorners: false,
-      });
+      // Fabric v7 uses class fields, so cornerColor / borderColor etc. are own
+      // properties on every instance — FabricObject.prototype.set() is silently
+      // overridden by each object's own value.  Apply the theme per-instance instead.
+      cv.getObjects().forEach(obj => { if (!obj._bg) applyCtrlTheme(obj); });
       cv.renderAll();
     }
 
@@ -3328,6 +3339,8 @@
 
     function addCopyControls(obj) {
       if (!obj._kind || obj.isTitle || obj.isLegend) return;
+      // Theme must be applied per-instance (Fabric v7 class fields own-property issue).
+      applyCtrlTheme(obj);
       const off = 22;
       const cs = 20;
       const makeHandler = dir => (evtData, transform) => { duplicateAnnotation(transform.target, dir); return true; };
