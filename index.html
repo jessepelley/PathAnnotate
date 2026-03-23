@@ -2858,6 +2858,7 @@
             _kind: 'block', _annId: ++annId,
           });
           cv.add(txt);
+          applyCtrlTheme(txt);
           cv.setActiveObject(txt);
           cv.renderAll();
           const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
@@ -2887,6 +2888,7 @@
             _kind: 'text', _annId: ++annId,
           });
           cv.add(txt);
+          applyCtrlTheme(txt);
           cv.setActiveObject(txt);
           txt.enterEditing();
           cv.renderAll();
