@@ -3477,6 +3477,11 @@
         // Resize handles and copy buttons are intentionally omitted — font size is
         // controlled via the sidebar slider, and duplication via the sidebar list.
         obj.controls = obj.controls.mtr ? { mtr: obj.controls.mtr } : {};
+        // oCoords is computed from controls and cached; replacing controls does NOT
+        // automatically update oCoords.  findControl() iterates oCoords then looks up
+        // this.controls[key], so stale oCoords keys (tl, tr, bl, br, …) cause
+        // "can't access property shouldActivate, o is undefined" on mouse move.
+        obj.setCoords();
       }
     }
 
