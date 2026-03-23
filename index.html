@@ -2858,6 +2858,7 @@
             _kind: 'block', _annId: ++annId,
           });
           cv.add(txt);
+          applyCtrlTheme(txt);
           cv.setActiveObject(txt);
           cv.renderAll();
           const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
@@ -2887,6 +2888,7 @@
             _kind: 'text', _annId: ++annId,
           });
           cv.add(txt);
+          applyCtrlTheme(txt);
           cv.setActiveObject(txt);
           txt.enterEditing();
           cv.renderAll();
@@ -3201,9 +3203,18 @@
         const a = annots.find(a => a.shape === obj || a.lbl === obj);
         if (!a) return;
         if (a.kind === 'line') {
-          // Double-click a line to toggle its arrowhead (same as the arrow button)
+          // Double-click toggles the arrowhead on whichever endpoint is closest to the click.
           const obj = a.shape;
-          obj.set({ _arrowEnd: !obj._arrowEnd, _arrowStart: false });
+          const lp  = obj.calcLinePoints();
+          const mtx = obj.calcTransformMatrix();
+          const p1  = fabric.util.transformPoint({ x: lp.x1, y: lp.y1 }, mtx);
+          const p2  = fabric.util.transformPoint({ x: lp.x2, y: lp.y2 }, mtx);
+          const c   = opt.scenePoint;
+          if (Math.hypot(c.x - p1.x, c.y - p1.y) < Math.hypot(c.x - p2.x, c.y - p2.y)) {
+            obj.set({ _arrowStart: !obj._arrowStart });
+          } else {
+            obj.set({ _arrowEnd: !obj._arrowEnd });
+          }
           obj.dirty = true;
           refreshList();
           cv.renderAll();
@@ -4171,7 +4182,7 @@
 
     // Returns the display label for an annotation in the sidebar list
     function getDispLabel(a) {
-      if (a.kind === 'line') return (a.shape && a.shape._arrowEnd) ? 'Arrow' : 'Line';
+      if (a.kind === 'line') return (a.shape && (a.shape._arrowEnd || a.shape._arrowStart)) ? 'Arrow' : 'Line';
       if (a.kind === 'rect') {
         if (!a.lbl) return 'Rect';
         const lbl = a.label || '';
