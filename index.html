@@ -2622,6 +2622,8 @@
       obj.cornerSize         = 10;
       obj.transparentCorners = false;
       obj.padding            = 8;
+      // IText editing cursor border defaults to Fabric's purple-blue; override to teal.
+      if ('editingBorderColor' in obj) obj.editingBorderColor = CTRL_ACCENT;
     }
 
     function applyFabricTheme() {
@@ -3460,14 +3462,10 @@
           copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
         });
       } else if (obj._kind === 'block' || obj._kind === 'text') {
-        // Block labels and free-form text: keep all standard Fabric handles and
-        // add the same copy buttons used by rect/line.
-        obj.controls = Object.assign({}, obj.controls, {
-          copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
-          copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
-          copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
-          copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
-        });
+        // Block labels and free-form text: rotation handle only.
+        // Resize handles and copy buttons are intentionally omitted — font size is
+        // controlled via the sidebar slider, and duplication via the sidebar list.
+        obj.controls = obj.controls.mtr ? { mtr: obj.controls.mtr } : {};
       }
     }
 
