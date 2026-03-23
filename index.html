@@ -1010,19 +1010,20 @@
       gap: 4px
     }
 
-    /* CUSTOM COLOR SWATCH (the + picker button) */
-    .swatch-add {
-      cursor: pointer;
+    /* CUSTOM COLOR SWATCH — displays the last picked color */
+    .swatch-custom {
       border: 1.5px dashed var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative
     }
 
-    .swatch-add:hover {
-      border-color: var(--accent);
-      color: var(--accent)
+    .swatch-custom:hover {
+      border-color: var(--accent)
+    }
+
+    /* RAINBOW SWATCH — opens the native color picker */
+    .swatch-rainbow {
+      background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+      position: relative;
+      overflow: hidden;
     }
 
     /* LEGEND MODAL */
@@ -2139,38 +2140,45 @@
         row.appendChild(el);
       });
 
-      // Custom color picker — a "+" swatch that opens the native color wheel.
-      // After picking, the swatch shows the chosen color and becomes the active swatch.
-      // Use a <div> with an explicit .click() call rather than <label> wrapping, because
-      // zero-size color inputs are not reliably activated by label clicks in all browsers.
-      const addLabel = document.createElement('div');
-      addLabel.className = 'swatch swatch-add';
-      addLabel.id = 'swatch-add';
-      addLabel.title = 'Custom color…';
-      addLabel.innerHTML =
-        `<svg width="9" height="9" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.5" style="pointer-events:none">` +
-        `<line x1="9" y1="1" x2="9" y2="17"/><line x1="1" y1="9" x2="17" y2="9"/></svg>`;
+      // Custom color display swatch — shows the last color picked via the rainbow picker.
+      // Clicking it re-activates that color without reopening the picker.
+      const customSwatch = document.createElement('div');
+      customSwatch.className = 'swatch swatch-custom';
+      customSwatch.id = 'swatch-custom';
+      customSwatch.title = 'Custom color…';
+      customSwatch.onclick = () => {
+        if (customSwatch.title && customSwatch.title !== 'Custom color…') {
+          activateSwatch(customSwatch.title, customSwatch);
+        }
+      };
+      row.appendChild(customSwatch);
+      customSwatchEl = customSwatch;
+
+      // Rainbow picker swatch — clicking opens the native color wheel.
+      // After picking, the custom swatch to the left is updated with the chosen color.
+      const rainbowSwatch = document.createElement('div');
+      rainbowSwatch.className = 'swatch swatch-rainbow';
+      rainbowSwatch.id = 'swatch-rainbow';
+      rainbowSwatch.title = 'Pick custom color…';
 
       const colorInp = document.createElement('input');
       colorInp.type = 'color';
       colorInp.id = 'custom-color-input';
-      // Transparent overlay directly inside the swatch — user clicks the input itself,
-      // so no programmatic .click() is needed (Safari blocks those on color inputs).
+      // Transparent overlay — user clicks the input itself (Safari blocks programmatic .click()).
       colorInp.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0';
       const onColorPick = function () {
         const c = this.value;
-        addLabel.style.background = c;
-        if (c === '#000000' || c === '#ffffff') addLabel.dataset.border = '1';
-        else delete addLabel.dataset.border;
-        addLabel.title = c;
-        activateSwatch(c, addLabel);
+        customSwatch.style.background = c;
+        if (c === '#000000' || c === '#ffffff') customSwatch.dataset.border = '1';
+        else delete customSwatch.dataset.border;
+        customSwatch.title = c;
+        activateSwatch(c, customSwatch);
       };
       colorInp.addEventListener('input', onColorPick);
       colorInp.addEventListener('change', onColorPick); // Safari fires change, not input
 
-      addLabel.appendChild(colorInp); // inside swatch — transparent overlay
-      row.appendChild(addLabel);
-      customSwatchEl = addLabel;
+      rainbowSwatch.appendChild(colorInp);
+      row.appendChild(rainbowSwatch);
     })();
 
     // ═══════════════════════════════════════════════════════
@@ -2377,8 +2385,8 @@
 
     function saveSettings() {
       try {
-        // Save custom color only if the custom swatch is currently active
-        const customColor = (customSwatchEl && !COLORS.includes(customSwatchEl.title))
+        // Save custom color only if the custom swatch has a valid picked color (starts with #)
+        const customColor = (customSwatchEl && customSwatchEl.title.startsWith('#'))
           ? customSwatchEl.title : null;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify({
           color, strokeW, fontSize, anchor, anchorMode, lineStyle, dark,
@@ -2613,7 +2621,7 @@
       obj.cornerStrokeColor  = CTRL_ACCENT;
       obj.cornerSize         = 10;
       obj.transparentCorners = false;
-      obj.padding            = 4;
+      obj.padding            = 8;
     }
 
     function applyFabricTheme() {
@@ -2888,6 +2896,7 @@
             if (!finalLbl) { cv.remove(txt); annId--; refreshList(); refreshCount(); return; }
             const ann = { id: txt._annId, shape: txt, lbl: null, color, label: finalLbl, kind: 'text', notes: '' };
             annots.push(ann);
+            addCopyControls(txt);
             // annots.push is deferred to here (after editing:exited), so
             // selection:created couldn't find this ann; set lastSelectedAnn
             // now so right-click paste immediately targets the new text object.
@@ -3018,16 +3027,12 @@
         // Rects start with no letter label — user adds one via the Letter button control.
         annots.push({ id: activeObj._annId, shape: activeObj, lbl: null, color, label: '', kind: tool, notes: '', noBlock: true });
 
-        if (tool === 'rect') {
-          // Fabric's internal _onMouseUp cleanup calls discardActiveObject() after
-          // this handler returns (because canvas.selection=false and the rect was
-          // selectable:false at mousedown time, so Fabric's hit-test found target=null).
-          // Deferring past that cleanup ensures the rect stays selected.
-          const drawnObj = activeObj;
-          setTimeout(() => { cv.setActiveObject(drawnObj); cv.renderAll(); }, 0);
-        } else {
-          cv.setActiveObject(activeObj);
-        }
+        // Fabric's internal _onMouseUp cleanup calls discardActiveObject() after this
+        // handler returns when canvas.selection=false and the object was selectable:false
+        // at mousedown time (Fabric's hit-test found target=null). Deferring past that
+        // cleanup ensures the newly drawn object stays selected for all draw tools.
+        const drawnObj = activeObj;
+        setTimeout(() => { if (cv) { cv.setActiveObject(drawnObj); cv.renderAll(); } }, 0);
 
         refreshList(true); refreshCount(); pushHist();
         if (tool === 'rect') updateOverlapClips();
@@ -3263,33 +3268,6 @@
       ctx.restore();
     }
 
-    // Arrowhead toggle button rendered on selected lines.
-    // Simple on/off: clicking adds or removes a single arrowhead at the line's end.
-    // Double-clicking the line itself does the same (see mouse:dblclick handler).
-    function renderArrowBtn(ctx, left, top, styleOverride, fabricObject) {
-      const size = 22, half = size / 2, r = 4;
-      const active = !!fabricObject._arrowEnd;
-      ctx.save();
-      ctx.fillStyle   = active ? 'rgba(0,212,184,0.92)' : 'rgba(100,100,100,0.82)';
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth   = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(left - half + r, top - half);
-      ctx.arcTo(left + half, top - half, left + half, top + half, r);
-      ctx.arcTo(left + half, top + half, left - half, top + half, r);
-      ctx.arcTo(left - half, top + half, left - half, top - half, r);
-      ctx.arcTo(left - half, top - half, left + half, top - half, r);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.round(size * 0.68)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(active ? '→' : '—', left, top + 0.5);
-      ctx.restore();
-    }
-
     function renderEndpointHandle(ctx, left, top, styleOverride, fabricObject) {
       const size = 14;
       const half = size / 2;
@@ -3298,7 +3276,7 @@
       ctx.strokeStyle = (fabricObject && fabricObject.cornerStrokeColor) || '#00d4b8';
       ctx.lineWidth   = 2;
       ctx.beginPath();
-      ctx.arc(left, top, half, 0, Math.PI * 2);
+      ctx.rect(left - half, top - half, size, size);
       ctx.fill();
       ctx.stroke();
       ctx.restore();
@@ -3350,6 +3328,7 @@
         ann.noBlock = false;
         ann.lbl = makeLblText(lbl, ann.shape);
         cv.add(ann.lbl);
+        addCopyControls(ann.lbl);
         autoInc(lbl);
       }
       cv.renderAll();
@@ -3438,40 +3417,10 @@
           });
         };
 
-        // Floating arrowhead cycle button — positioned at the line midpoint,
-        // offset upward in screen space so it doesn't sit on top of the line.
-        const arrowCtrl = new fabric.Control({
-          x: 0, y: 0, offsetX: 0, offsetY: -32,
-          cursorStyle: 'pointer',
-          cornerSize: 22,
-          // Place the control at the line's visual midpoint. target.left/top IS the
-          // centre since we always bake width/height/left/top when drawing/editing.
-          positionHandler(dim, finalMatrix, target) {
-            const vpt = (target.canvas && target.canvas.viewportTransform) || [1,0,0,1,0,0];
-            const ctr = fabric.util.transformPoint({ x: target.left, y: target.top }, vpt);
-            ctr.y -= 32;
-            return ctr;
-          },
-          mouseUpHandler(eventData, transform) {
-            const obj = transform.target;
-            if (obj._kind !== 'line') return false;
-            // Toggle arrowhead: on → off → on. _arrowStart is never used (no double-ended arrows).
-            obj.set({ _arrowEnd: !obj._arrowEnd, _arrowStart: false });
-            obj.dirty = true; // invalidate render cache so patched _render sees new arrow state
-            refreshList(); // update 'Line' ↔ 'Arrow' in sidebar
-            cv.renderAll();
-            pushHist();
-            return true;
-          },
-          render: renderArrowBtn,
-          actionName: 'arrowCycle',
-        });
-
         // Replace controls entirely: no scale/rotate handles, only endpoints + copy.
         obj.controls = {
           p1: makeEndpoint(true),
           p2: makeEndpoint(false),
-          arrowHead: arrowCtrl,
           copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
           copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
           copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
@@ -3967,6 +3916,7 @@
             });
             editAnn.lbl = lbl;
             cv.add(lbl);
+            addCopyControls(lbl);
           }
         } else {
           if (editAnn.lbl) editAnn.lbl.set('text', v);
