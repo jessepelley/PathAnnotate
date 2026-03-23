@@ -2049,7 +2049,8 @@
     let pendingIncLabel = null;  // label used for last-drawn rect, cleared on deselect/next-draw
 
     let txtEditJustExited = false;  // prevents creating new annotation on click-away from IText
-    let blockJustPlaced   = false;  // first click after placing a block dismisses instead of creating
+    let blockJustPlaced   = false;  // first background-click after placing a block deselects instead of creating
+    let blockBeingPlaced  = null;   // block object currently being dragged into position on creation
     let drawing = false, ox = 0, oy = 0, activeObj = null;
     let annots = [];   // {id, shape, lbl, color, label, kind, notes, _freeOffset}
     let annId = 0;
@@ -2813,25 +2814,28 @@
 
         if (tool === 'block') {
           const p = opt.scenePoint;
-          // Shortcut: clicking INSIDE a rect applies/toggles the block label directly,
-          // exactly like clicking the floating letter button — no floating block is placed.
+          // Clicks on existing non-bg objects (e.g. a block just placed) let Fabric
+          // handle the event normally — this allows click-to-select and drag-to-move.
+          // blockJustPlaced intentionally stays true so the next background click still
+          // deselects instead of creating a new block.
+          if (opt.target && !opt.target._bg) return;
+          // Shortcut: clicking inside a rect ADDS a letter label to that rect (like
+          // the floating letter button), but never removes — toggle is the button's job.
           const rectAnn = rectContaining(p.x, p.y);
           if (rectAnn) {
-            applyLetterToRect(rectAnn);
+            if (!rectAnn.lbl) applyLetterToRect(rectAnn);
             return;
           }
-          // First click after placing a block dismisses the selection instead of
-          // immediately creating another block (matches rect/text tool behaviour).
+          // Background click while a block was just placed — deselect and stop.
           if (blockJustPlaced) {
             blockJustPlaced = false;
             cv.discardActiveObject();
             cv.renderAll();
             return;
           }
-          // Clicks on existing non-background objects (e.g. a block label already
-          // placed) should select that object, not create a new one.
-          if (opt.target && !opt.target._bg) return;
-          // Place a floating block label at the click position.
+          // Create a floating block label. Placement-drag mode starts here: the
+          // block follows the cursor while the mouse button is held and is
+          // finalised (history pushed, anchor-snap applied) on mouse:up.
           const lbl = getLbl();
           const txt = new fabric.Text(lbl, {
             left: p.x, top: p.y,
@@ -2851,9 +2855,8 @@
           const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
           annots.push(ann);
           autoInc(lbl);
-          if (anchorMode === 'anchor') snapBlockToRect(ann);
-          blockJustPlaced = true;
-          refreshList(true); refreshCount(); pushHist();
+          blockBeingPlaced = txt;   // mouse:move will reposition; mouse:up finalises
+          refreshList(true); refreshCount();
           return;
         }
 
@@ -2920,6 +2923,13 @@
       cv.on('mouse:move', opt => {
         const p = opt.scenePoint;
         lastMousePos = p;
+        // Block placement drag: reposition the newly created block under the cursor.
+        if (blockBeingPlaced) {
+          blockBeingPlaced.set({ left: p.x, top: p.y });
+          blockBeingPlaced.setCoords();
+          cv.renderAll();
+          return;
+        }
         // Block tool: show pointer when hovering over a rect to hint that clicking labels it
         if (tool === 'block' && !drawing) {
           cv.defaultCursor = rectContaining(p.x, p.y) ? 'pointer' : 'crosshair';
@@ -2970,6 +2980,17 @@
       });
 
       cv.on('mouse:up', () => {
+        // Finalise block placement drag started in mouse:down.
+        if (blockBeingPlaced) {
+          const txt = blockBeingPlaced;
+          blockBeingPlaced = null;
+          const ann = annots.find(a => a.shape === txt);
+          if (ann && anchorMode === 'anchor') snapBlockToRect(ann);
+          addCopyControls(txt);
+          blockJustPlaced = true;
+          refreshList(true); refreshCount(); pushHist();
+          return;
+        }
         if (!drawing || !activeObj) return;
         drawing = false;
 
@@ -3473,6 +3494,15 @@
         });
         obj.controls = Object.assign({}, obj.controls, {
           letterToggle: letterCtrl,
+          copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
+          copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
+          copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
+          copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
+        });
+      } else if (obj._kind === 'block' || obj._kind === 'text') {
+        // Block labels and free-form text: keep all standard Fabric handles and
+        // add the same copy buttons used by rect/line.
+        obj.controls = Object.assign({}, obj.controls, {
           copyTop:    ctrl( 0,   -0.5,    0, -off, 'top'),
           copyBottom: ctrl( 0,    0.5,    0,  off, 'bottom'),
           copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
@@ -4006,7 +4036,8 @@
     // ═══════════════════════════════════════════════════════
     function setTool(t) {
       tool = t;
-      blockJustPlaced = false; // always reset on tool switch
+      blockJustPlaced = false;   // always reset on tool switch
+      blockBeingPlaced = null;   // abort any in-progress block placement drag
       ['rect', 'line', 'block', 'text', 'select'].forEach(id => {
         const el = document.getElementById('tool-' + id);
         if (el) el.classList.toggle('active', id === t);
@@ -4593,6 +4624,7 @@
       histLock = true;
       lastElevatedRect = null;
       lastSelectedAnn  = null;
+      blockBeingPlaced = null;   // abort any in-progress block placement drag
 
       // Explicitly remove all objects before restoring.  Fabric v7's loadFromJSON
       // does NOT automatically clear the canvas first (unlike older versions), so
