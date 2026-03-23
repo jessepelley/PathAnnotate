@@ -4506,12 +4506,26 @@
     // ═══════════════════════════════════════════════════════
     const JSON_PROPS = ['_bg', '_kind', '_annId', 'isLegend', 'isTitle', '_arrowStart', '_arrowEnd'];
 
+    // Register custom properties with Fabric v7's class-level registry.
+    // In Fabric v7, canvas.toJSON() no longer accepts a propertiesToInclude
+    // argument — the parameter was removed from the TypeScript signature.
+    // canvas.toObject(extraProps) still accepts it and passes it through to
+    // each object's toObject. Additionally, setting FabricObject.customProperties
+    // ensures the deserialization path (fromObject → constructor → set) also
+    // applies these properties back onto every restored instance.
+    if (FabricObject) {
+      FabricObject.customProperties = JSON_PROPS;
+    }
+
     // Return canvas JSON with the background image object stripped out.
     // The bg is always recreated from imgDataURL on load, so embedding
     // the base64 src would make exported files enormous.
+    // MUST use cv.toObject (not cv.toJSON) — Fabric v7's toJSON ignores any
+    // propertiesToInclude argument, so _bg/_kind/_annId would be absent from
+    // every serialized object, breaking bg-filtering and byId reconstruction.
     function getCanvasJSON() {
-      const j = cv.toJSON(JSON_PROPS);
-      j.objects = j.objects.filter(o => !o._bg);
+      const j = cv.toObject(JSON_PROPS);
+      j.objects = (j.objects || []).filter(o => !o._bg);
       return j;
     }
 
@@ -4577,21 +4591,17 @@
 
     function applySnap(snap) {
       histLock = true;
-      // Clear stale object references before loading — old Fabric objects will be
-      // replaced by new ones created by loadFromJSON.
       lastElevatedRect = null;
       lastSelectedAnn  = null;
 
-      cv.loadFromJSON(snap.json).then(() => {
-        // Fabric v7 does not guarantee that unknown custom properties survive loadFromJSON.
-        // Re-apply them from the stored JSON by matching object indices. snap.json has the
-        // bg stripped, so getObjects() indices align 1-to-1 with snap.json.objects.
-        const jsonObjs = snap.json.objects || [];
-        cv.getObjects().forEach((obj, idx) => {
-          const src = jsonObjs[idx];
-          if (src) JSON_PROPS.forEach(k => { if (src[k] !== undefined) obj[k] = src[k]; });
-        });
+      // Explicitly remove all objects before restoring.  Fabric v7's loadFromJSON
+      // does NOT automatically clear the canvas first (unlike older versions), so
+      // without this step old objects and newly-loaded objects coexist, causing
+      // orphaned ghost shapes and incorrect byId index reconstruction.
+      cv.discardActiveObject();
+      cv.getObjects().slice().forEach(o => cv.remove(o));
 
+      cv.loadFromJSON(snap.json).then(() => {
         // snap.json has the bg stripped (getCanvasJSON). Re-add it from imgDataURL
         // so it is always freshly created and locked — avoids _bg property round-trip
         // issues that can leave the background selectable/moveable after undo.
