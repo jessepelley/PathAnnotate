@@ -2871,7 +2871,7 @@
             _kind: 'block', _annId: ++annId,
           });
           cv.add(txt);
-          applyCtrlTheme(txt);
+          addCopyControls(txt);  // restricts to mtr-only immediately (applyCtrlTheme called inside)
           cv.setActiveObject(txt);
           cv.renderAll();
           const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
@@ -2901,7 +2901,7 @@
             _kind: 'text', _annId: ++annId,
           });
           cv.add(txt);
-          applyCtrlTheme(txt);
+          addCopyControls(txt);  // restricts to mtr-only (applyCtrlTheme called inside)
           cv.setActiveObject(txt);
           txt.enterEditing();
           cv.renderAll();
@@ -3472,8 +3472,8 @@
           copyLeft:   ctrl(-0.5,  0,  -off,    0, 'left'),
           copyRight:  ctrl( 0.5,  0,   off,    0, 'right'),
         });
-      } else if (obj._kind === 'block' || obj._kind === 'text') {
-        // Block labels and free-form text: rotation handle only.
+      } else if (obj._kind === 'block' || obj._kind === 'text' || obj._kind === 'lbl') {
+        // Block labels, free-form text, and rect letter labels: rotation handle only.
         // Resize handles and copy buttons are intentionally omitted — font size is
         // controlled via the sidebar slider, and duplication via the sidebar list.
         obj.controls = obj.controls.mtr ? { mtr: obj.controls.mtr } : {};
