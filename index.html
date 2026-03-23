@@ -2153,7 +2153,9 @@
       const colorInp = document.createElement('input');
       colorInp.type = 'color';
       colorInp.id = 'custom-color-input';
-      colorInp.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0';
+      // Transparent overlay directly inside the swatch — user clicks the input itself,
+      // so no programmatic .click() is needed (Safari blocks those on color inputs).
+      colorInp.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0';
       const onColorPick = function () {
         const c = this.value;
         addLabel.style.background = c;
@@ -2165,8 +2167,7 @@
       colorInp.addEventListener('input', onColorPick);
       colorInp.addEventListener('change', onColorPick); // Safari fires change, not input
 
-      addLabel.addEventListener('click', () => colorInp.click());
-      document.body.appendChild(colorInp); // outside canvas DOM so it never affects layout
+      addLabel.appendChild(colorInp); // inside swatch — transparent overlay
       row.appendChild(addLabel);
       customSwatchEl = addLabel;
     })();
@@ -4521,6 +4522,15 @@
       lastSelectedAnn  = null;
 
       cv.loadFromJSON(snap.json).then(() => {
+        // Fabric v7 does not guarantee that unknown custom properties survive loadFromJSON.
+        // Re-apply them from the stored JSON by matching object indices. snap.json has the
+        // bg stripped, so getObjects() indices align 1-to-1 with snap.json.objects.
+        const jsonObjs = snap.json.objects || [];
+        cv.getObjects().forEach((obj, idx) => {
+          const src = jsonObjs[idx];
+          if (src) JSON_PROPS.forEach(k => { if (src[k] !== undefined) obj[k] = src[k]; });
+        });
+
         // snap.json has the bg stripped (getCanvasJSON). Re-add it from imgDataURL
         // so it is always freshly created and locked — avoids _bg property round-trip
         // issues that can leave the background selectable/moveable after undo.
