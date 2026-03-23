@@ -2100,20 +2100,24 @@
     //  COLOR SWATCHES
     // ═══════════════════════════════════════════════════════
 
-    // Apply a color to the currently selected canvas object and update the annotation record.
+    // Apply a color to the currently selected canvas object(s) and update the annotation record.
     function applyColorToSelection(c) {
       if (!cv) return;
       const obj = cv.getActiveObject();
       if (!obj || obj._bg) return;
-      if (obj._kind === 'rect' || obj._kind === 'line') {
-        obj.set('stroke', c);
-        const a = annots.find(a => a.shape === obj);
-        if (a) { a.color = c; if (a.lbl) a.lbl.set('fill', c); }
-      } else if (obj._kind === 'text' || obj._kind === 'block' || obj._kind === 'lbl') {
-        obj.set('fill', c);
-        const a = annots.find(a => a.shape === obj || a.lbl === obj);
-        if (a) a.color = c;
-      }
+      const sources = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
+      sources.forEach(o => {
+        if (o._bg) return;
+        if (o._kind === 'rect' || o._kind === 'line') {
+          o.set('stroke', c);
+          const a = annots.find(a => a.shape === o);
+          if (a) { a.color = c; if (a.lbl) a.lbl.set('fill', c); }
+        } else if (o._kind === 'text' || o._kind === 'block' || o._kind === 'lbl') {
+          o.set('fill', c);
+          const a = annots.find(a => a.shape === o || a.lbl === o);
+          if (a) a.color = c;
+        }
+      });
       cv.renderAll(); refreshList();
     }
 
@@ -2190,10 +2194,12 @@
       saveSettings();
       if (!cv) return;
       const obj = cv.getActiveObject();
-      if (obj && !obj._bg && (obj._kind === 'rect' || obj._kind === 'line')) {
-        obj.set('strokeWidth', strokeW);
-        cv.renderAll();
-      }
+      if (!obj || obj._bg) return;
+      const sources = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
+      sources.forEach(o => {
+        if (!o._bg && (o._kind === 'rect' || o._kind === 'line')) o.set('strokeWidth', strokeW);
+      });
+      cv.renderAll();
     });
 
     // ═══════════════════════════════════════════════════════
@@ -2206,15 +2212,18 @@
       if (!cv) return;
       const obj = cv.getActiveObject();
       if (!obj || obj._bg) return;
-      if (obj._kind === 'text' || obj._kind === 'block' || obj._kind === 'lbl') {
-        obj.set('fontSize', fontSize);
-        cv.renderAll();
-      } else if (obj._kind === 'rect') {
-        // Also resize the attached label and reglue its position
-        const a = annots.find(a => a.shape === obj);
-        if (a && a.lbl) { a.lbl.set('fontSize', fontSize); glueLbl(obj); }
-        cv.renderAll();
-      }
+      const sources = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
+      sources.forEach(o => {
+        if (o._bg) return;
+        if (o._kind === 'text' || o._kind === 'block' || o._kind === 'lbl') {
+          o.set('fontSize', fontSize);
+        } else if (o._kind === 'rect') {
+          // Also resize the attached label and reglue its position
+          const a = annots.find(a => a.shape === o);
+          if (a && a.lbl) { a.lbl.set('fontSize', fontSize); glueLbl(o); }
+        }
+      });
+      cv.renderAll();
     });
 
     // ═══════════════════════════════════════════════════════
@@ -2228,11 +2237,13 @@
       saveSettings();
       if (!cv) return;
       const obj = cv.getActiveObject();
-      if (obj && !obj._bg && (obj._kind === 'line' || obj._kind === 'rect')) {
-        const dp = DASH_PATTERNS[style];
-        obj.set('strokeDashArray', dp);
-        cv.renderAll();
-      }
+      if (!obj || obj._bg) return;
+      const sources = obj.type === 'activeSelection' ? obj.getObjects() : [obj];
+      const dp = DASH_PATTERNS[style];
+      sources.forEach(o => {
+        if (!o._bg && (o._kind === 'line' || o._kind === 'rect')) o.set('strokeDashArray', dp);
+      });
+      cv.renderAll();
     }
 
     // ═══════════════════════════════════════════════════════
