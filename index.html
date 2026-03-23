@@ -3563,6 +3563,18 @@
       if (direction === 'bottom') { dx = -sin * H; dy =  cos * H; }
       if (direction === 'top')    { dx =  sin * H; dy = -cos * H; }
 
+      // For lines, H or W can be ~0 (exactly strokeWidth thick) when the line is
+      // perfectly horizontal or vertical, causing the offset to collapse to zero and
+      // the duplicate to land directly on top of the original.
+      // Enforce a minimum separation so the copy is always visually distinct and
+      // independently clickable regardless of the line's orientation.
+      if (ann.kind === 'line' && Math.hypot(dx, dy) < 24) {
+        if (direction === 'right')  { dx =  cos * 24; dy =  sin * 24; }
+        if (direction === 'left')   { dx = -cos * 24; dy = -sin * 24; }
+        if (direction === 'bottom') { dx = -sin * 24; dy =  cos * 24; }
+        if (direction === 'top')    { dx =  sin * 24; dy = -cos * 24; }
+      }
+
       const ncx = center.x + dx, ncy = center.y + dy;
 
       obj.clone(JSON_PROPS).then(cloned => {
