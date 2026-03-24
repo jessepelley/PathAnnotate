@@ -2050,6 +2050,7 @@
     let pendingIncLabel = null;  // label used for last-drawn rect, cleared on deselect/next-draw
 
     let txtEditJustExited = false;  // prevents creating new annotation on click-away from IText
+    let blockPending      = false;  // mouse:down registered but mouse hasn't moved yet — no object created
     let blockBeingPlaced  = null;   // block object currently being dragged into position on creation
     let drawing = false, ox = 0, oy = 0, activeObj = null;
     let annots = [];   // {id, shape, lbl, color, label, kind, notes, _freeOffset}
@@ -2844,34 +2845,10 @@
             if (!rectAnn.lbl) applyLetterToRect(rectAnn);
             return;
           }
-          // Create a floating block label. Placement-drag mode starts here: the
-          // block follows the cursor while the mouse button is held and is
-          // finalised (history pushed, anchor-snap applied) on mouse:up.
-          // ox/oy record the click origin so mouse:up can cancel a bare click
-          // (no drag) the same way rect/line discard tiny shapes.
+          // Record start point only — the block object is created on the first
+          // mouse:move so a bare click never produces any object at all.
           ox = p.x; oy = p.y;
-          const lbl = getLbl();
-          const txt = new fabric.Text(lbl, {
-            left: p.x, top: p.y,
-            originX: 'left', originY: 'top',
-            fontSize,
-            fontFamily: 'DM Mono, monospace',
-            fill: color,
-            shadow: makeShadow(),
-            padding: 20,
-            cornerSize: 10,
-            selectable: true, evented: true,
-            _kind: 'block', _annId: ++annId,
-          });
-          cv.add(txt);
-          addCopyControls(txt);  // restricts to mtr-only immediately (applyCtrlTheme called inside)
-          cv.setActiveObject(txt);
-          cv.renderAll();
-          const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
-          annots.push(ann);
-          autoInc(lbl);
-          blockBeingPlaced = txt;   // mouse:move will reposition; mouse:up finalises
-          refreshList(true); refreshCount();
+          blockPending = true;
           return;
         }
 
@@ -2940,7 +2917,32 @@
       cv.on('mouse:move', opt => {
         const p = opt.scenePoint;
         lastMousePos = p;
-        // Block placement drag: reposition the newly created block under the cursor.
+        // First movement after mouse:down with block tool — create the object now.
+        if (blockPending) {
+          blockPending = false;
+          const lbl = getLbl();
+          const txt = new fabric.Text(lbl, {
+            left: p.x, top: p.y,
+            originX: 'left', originY: 'top',
+            fontSize,
+            fontFamily: 'DM Mono, monospace',
+            fill: color,
+            shadow: makeShadow(),
+            padding: 20,
+            cornerSize: 10,
+            selectable: true, evented: true,
+            _kind: 'block', _annId: ++annId,
+          });
+          cv.add(txt);
+          addCopyControls(txt);
+          cv.setActiveObject(txt);
+          const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
+          annots.push(ann);
+          autoInc(lbl);
+          blockBeingPlaced = txt;
+          refreshList(true); refreshCount();
+        }
+        // Block placement drag: follow the cursor.
         if (blockBeingPlaced) {
           blockBeingPlaced.set({ left: p.x, top: p.y });
           blockBeingPlaced.setCoords();
@@ -2997,21 +2999,12 @@
       });
 
       cv.on('mouse:up', opt => {
-        // Finalise block placement drag started in mouse:down.
+        // Bare click with block tool — mouse never moved so no object was created.
+        if (blockPending) { blockPending = false; return; }
+        // Finalise block placement drag.
         if (blockBeingPlaced) {
           const txt = blockBeingPlaced;
           blockBeingPlaced = null;
-          // Cancel if mouse barely moved — consistent with rect/line "tiny" check.
-          const p = opt.scenePoint;
-          if (Math.hypot(p.x - ox, p.y - oy) < 5) {
-            const ann = annots.find(a => a.shape === txt);
-            if (ann) { annots.splice(annots.indexOf(ann), 1); annId--; }
-            cv.remove(txt);
-            cv.discardActiveObject();
-            cv.renderAll();
-            refreshList(); refreshCount();
-            return;
-          }
           const ann = annots.find(a => a.shape === txt);
           if (ann && anchorMode === 'anchor') snapBlockToRect(ann);
           addCopyControls(txt);
@@ -3243,11 +3236,40 @@
         openEdit(a, opt.e);
       });
 
-      // Right-click: paste a copy of the last selected annotation at the cursor position
+      // Right-click shortcut — three priority levels:
+      //  1. On a block object  → spin-plus the range label in place (A → A-B → A-C …)
+      //  2. Inside a rectangle → apply a letter label (same as block-tool click on rect)
+      //  3. Elsewhere          → paste a copy of the last selected annotation
       cv.upperCanvasEl.addEventListener('contextmenu', e => {
         e.preventDefault();
-        if (!lastSelectedAnn) return;
         const p = cv.getScenePoint(e);
+
+        // 1. Block range expand
+        const target = cv.findTarget(e);
+        if (target && target._kind === 'block') {
+          const ann = annots.find(a => a.shape === target);
+          if (ann) {
+            const cur = (target.text || ann.label || '').trim();
+            const newV = spinPlusValue(cur);
+            if (newV !== cur) {
+              ann.label = newV;
+              target.set('text', newV);
+              setLbl(newV); autoInc(newV);
+              cv.renderAll(); refreshList(); refreshLabelKey(); pushHist();
+            }
+          }
+          return;
+        }
+
+        // 2. Letter label on rect
+        const rectAnn = rectContaining(p.x, p.y);
+        if (rectAnn) {
+          if (!rectAnn.lbl) applyLetterToRect(rectAnn);
+          return;
+        }
+
+        // 3. Paste last annotation
+        if (!lastSelectedAnn) return;
         pasteAnnotationAt(lastSelectedAnn, p.x, p.y);
       });
 
@@ -3975,17 +3997,23 @@
       closeEdit();
     }
 
+    // Pure helper — computes the spin-plus result for a label string without
+    // touching the DOM.  Used by popupSpinPlus and the right-click shortcut.
+    function spinPlusValue(v) {
+      const rm = v.match(/^(\d+)-(\d+)$/);
+      if (rm) return `${rm[1]}-${+rm[2] + 1}`;
+      const nm = v.match(/^(\d+)$/);
+      if (nm) return `${+nm[1]}-${+nm[1] + 1}`;
+      const am = v.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      if (am) return `${am[1]}-${nextAlpha(am[2])}`;
+      if (/^[A-Za-z]+$/.test(v)) return `${v}-${nextAlpha(v)}`;
+      return v;
+    }
+
     // Spin +/- within the popup — modifies the edit-input value in place.
     function popupSpinPlus() {
       const inp = document.getElementById('edit-input');
-      const v = inp.value.trim();
-      const rm = v.match(/^(\d+)-(\d+)$/);
-      if (rm) { inp.value = `${rm[1]}-${+rm[2] + 1}`; return; }
-      const nm = v.match(/^(\d+)$/);
-      if (nm) { inp.value = `${+nm[1]}-${+nm[1] + 1}`; return; }
-      const am = v.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
-      if (am) { inp.value = `${am[1]}-${nextAlpha(am[2])}`; return; }
-      if (/^[A-Za-z]+$/.test(v)) { inp.value = `${v}-${nextAlpha(v)}`; return; }
+      inp.value = spinPlusValue(inp.value.trim());
     }
 
     function popupSpinMinus() {
@@ -4036,6 +4064,7 @@
     // ═══════════════════════════════════════════════════════
     function setTool(t) {
       tool = t;
+      blockPending     = false;  // abort any pending block start
       blockBeingPlaced = null;   // abort any in-progress block placement drag
       ['rect', 'line', 'block', 'text', 'select'].forEach(id => {
         const el = document.getElementById('tool-' + id);
@@ -4623,6 +4652,7 @@
       histLock = true;
       lastElevatedRect = null;
       lastSelectedAnn  = null;
+      blockPending     = false;
       blockBeingPlaced = null;   // abort any in-progress block placement drag
 
       // Explicitly remove all objects before restoring.  Fabric v7's loadFromJSON
