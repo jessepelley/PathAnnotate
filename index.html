@@ -3237,17 +3237,23 @@
       });
 
       // Right-click shortcut — three priority levels:
-      //  1. On a block object  → spin-plus the range label in place (A → A-B → A-C …)
-      //  2. Inside a rectangle → apply a letter label (same as block-tool click on rect)
-      //  3. Elsewhere          → paste a copy of the last selected annotation
+      //  1. On a block or rect-label object → spin-plus the range label in place (A → A-B → A-C …)
+      //  2. Inside a rectangle              → apply a letter label (same as block-tool click on rect)
+      //  3. Elsewhere                       → paste a copy of the last selected annotation
       cv.upperCanvasEl.addEventListener('contextmenu', e => {
         e.preventDefault();
         const p = cv.getScenePoint(e);
 
-        // 1. Block range expand
-        const target = cv.findTarget(e);
-        if (target && target._kind === 'block') {
-          const ann = annots.find(a => a.shape === target);
+        // findTarget() is not reliable for contextmenu (not in Fabric's event pipeline);
+        // do a manual hit-test by iterating objects top-to-bottom.
+        const pt = new fabric.Point(p.x, p.y);
+        const target = [...cv.getObjects()].reverse().find(o => !o._bg && o.containsPoint(pt));
+
+        // 1. Block / lbl range expand
+        if (target && (target._kind === 'block' || target._kind === 'lbl')) {
+          const ann = target._kind === 'block'
+            ? annots.find(a => a.shape === target)
+            : annots.find(a => a.lbl === target);
           if (ann) {
             const cur = (target.text || ann.label || '').trim();
             const newV = spinPlusValue(cur);
