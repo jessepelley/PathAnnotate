@@ -2105,7 +2105,7 @@
       if (!cv) return;
       const obj = cv.getActiveObject();
       if (!obj || obj._bg) return;
-      const sources = obj.type === 'ActiveSelection' ? obj.getObjects() : [obj];
+      const sources = obj.type === 'activeselection' ? obj.getObjects() : [obj];
       sources.forEach(o => {
         if (o._bg) return;
         if (o._kind === 'rect' || o._kind === 'line') {
@@ -2195,7 +2195,7 @@
       if (!cv) return;
       const obj = cv.getActiveObject();
       if (!obj || obj._bg) return;
-      const sources = obj.type === 'ActiveSelection' ? obj.getObjects() : [obj];
+      const sources = obj.type === 'activeselection' ? obj.getObjects() : [obj];
       sources.forEach(o => {
         if (!o._bg && (o._kind === 'rect' || o._kind === 'line')) o.set('strokeWidth', strokeW);
       });
@@ -2212,7 +2212,7 @@
       if (!cv) return;
       const obj = cv.getActiveObject();
       if (!obj || obj._bg) return;
-      const sources = obj.type === 'ActiveSelection' ? obj.getObjects() : [obj];
+      const sources = obj.type === 'activeselection' ? obj.getObjects() : [obj];
       sources.forEach(o => {
         if (o._bg) return;
         if (o._kind === 'text' || o._kind === 'block' || o._kind === 'lbl') {
@@ -2238,7 +2238,7 @@
       if (!cv) return;
       const obj = cv.getActiveObject();
       if (!obj || obj._bg) return;
-      const sources = obj.type === 'ActiveSelection' ? obj.getObjects() : [obj];
+      const sources = obj.type === 'activeselection' ? obj.getObjects() : [obj];
       const dp = DASH_PATTERNS[style];
       sources.forEach(o => {
         if (!o._bg && (o._kind === 'line' || o._kind === 'rect')) o.set('strokeDashArray', dp);
@@ -3057,7 +3057,7 @@
       cv.on('selection:created', opt => {
         const obj = cv.getActiveObject();
         // Apply teal theme to multi-selection box (ActiveSelection is its own object instance)
-        if (obj && obj.type === 'ActiveSelection') applyCtrlTheme(obj);
+        if (obj && obj.type === 'activeselection') applyCtrlTheme(obj);
         if (obj && !obj._bg) {
           const a = annots.find(a => a.shape === obj || a.lbl === obj);
           if (a) {
@@ -3079,7 +3079,7 @@
         // Flush pending increment when user moves to a different object
         if (pendingIncLabel !== null) { autoInc(pendingIncLabel); pendingIncLabel = null; }
         const obj = cv.getActiveObject();
-        if (obj && obj.type === 'ActiveSelection') applyCtrlTheme(obj);
+        if (obj && obj.type === 'activeselection') applyCtrlTheme(obj);
         if (obj && !obj._bg) {
           const a = annots.find(a => a.shape === obj || a.lbl === obj);
           if (a) {
@@ -4135,7 +4135,7 @@
 
       const obj = cv.getActiveObject();
       if (obj && !obj._bg) {
-        const sources = obj.type === 'ActiveSelection' ? obj.getObjects() : [obj];
+        const sources = obj.type === 'activeselection' ? obj.getObjects() : [obj];
         sources.forEach(o => {
           if (o._bg) return;
           if (o.isTitle) {
@@ -4789,7 +4789,7 @@
       if (!cv) return;
       const obj = cv.getActiveObject();
       if (!obj) return;
-      const sources = obj.type === 'ActiveSelection' ? obj.getObjects() : [obj];
+      const sources = obj.type === 'activeselection' ? obj.getObjects() : [obj];
       const valid = sources
         .filter(o => !o._bg && (o._kind === 'rect' || o._kind === 'line' || o._kind === 'text' || o._kind === 'block'))
         .map(o => annots.find(a => a.shape === o))
