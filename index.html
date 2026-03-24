@@ -2050,7 +2050,6 @@
     let pendingIncLabel = null;  // label used for last-drawn rect, cleared on deselect/next-draw
 
     let txtEditJustExited = false;  // prevents creating new annotation on click-away from IText
-    let blockJustPlaced   = false;  // first background-click after placing a block deselects instead of creating
     let blockBeingPlaced  = null;   // block object currently being dragged into position on creation
     let drawing = false, ox = 0, oy = 0, activeObj = null;
     let annots = [];   // {id, shape, lbl, color, label, kind, notes, _freeOffset}
@@ -2837,8 +2836,6 @@
           const p = opt.scenePoint;
           // Clicks on existing non-bg objects (e.g. a block just placed) let Fabric
           // handle the event normally — this allows click-to-select and drag-to-move.
-          // blockJustPlaced intentionally stays true so the next background click still
-          // deselects instead of creating a new block.
           if (opt.target && !opt.target._bg) return;
           // Shortcut: clicking inside a rect ADDS a letter label to that rect (like
           // the floating letter button), but never removes — toggle is the button's job.
@@ -2847,16 +2844,12 @@
             if (!rectAnn.lbl) applyLetterToRect(rectAnn);
             return;
           }
-          // Background click while a block was just placed — deselect and stop.
-          if (blockJustPlaced) {
-            blockJustPlaced = false;
-            cv.discardActiveObject();
-            cv.renderAll();
-            return;
-          }
           // Create a floating block label. Placement-drag mode starts here: the
           // block follows the cursor while the mouse button is held and is
           // finalised (history pushed, anchor-snap applied) on mouse:up.
+          // ox/oy record the click origin so mouse:up can cancel a bare click
+          // (no drag) the same way rect/line discard tiny shapes.
+          ox = p.x; oy = p.y;
           const lbl = getLbl();
           const txt = new fabric.Text(lbl, {
             left: p.x, top: p.y,
@@ -3003,15 +2996,25 @@
         cv.renderAll();
       });
 
-      cv.on('mouse:up', () => {
+      cv.on('mouse:up', opt => {
         // Finalise block placement drag started in mouse:down.
         if (blockBeingPlaced) {
           const txt = blockBeingPlaced;
           blockBeingPlaced = null;
+          // Cancel if mouse barely moved — consistent with rect/line "tiny" check.
+          const p = opt.scenePoint;
+          if (Math.hypot(p.x - ox, p.y - oy) < 5) {
+            const ann = annots.find(a => a.shape === txt);
+            if (ann) { annots.splice(annots.indexOf(ann), 1); annId--; }
+            cv.remove(txt);
+            cv.discardActiveObject();
+            cv.renderAll();
+            refreshList(); refreshCount();
+            return;
+          }
           const ann = annots.find(a => a.shape === txt);
           if (ann && anchorMode === 'anchor') snapBlockToRect(ann);
           addCopyControls(txt);
-          blockJustPlaced = true;
           refreshList(true); refreshCount(); pushHist();
           return;
         }
@@ -4033,7 +4036,6 @@
     // ═══════════════════════════════════════════════════════
     function setTool(t) {
       tool = t;
-      blockJustPlaced = false;   // always reset on tool switch
       blockBeingPlaced = null;   // abort any in-progress block placement drag
       ['rect', 'line', 'block', 'text', 'select'].forEach(id => {
         const el = document.getElementById('tool-' + id);
