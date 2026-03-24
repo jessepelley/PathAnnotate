@@ -3243,11 +3243,40 @@
         openEdit(a, opt.e);
       });
 
-      // Right-click: paste a copy of the last selected annotation at the cursor position
+      // Right-click shortcut — three priority levels:
+      //  1. On a block object  → spin-plus the range label in place (A → A-B → A-C …)
+      //  2. Inside a rectangle → apply a letter label (same as block-tool click on rect)
+      //  3. Elsewhere          → paste a copy of the last selected annotation
       cv.upperCanvasEl.addEventListener('contextmenu', e => {
         e.preventDefault();
-        if (!lastSelectedAnn) return;
         const p = cv.getScenePoint(e);
+
+        // 1. Block range expand
+        const target = cv.findTarget(e);
+        if (target && target._kind === 'block') {
+          const ann = annots.find(a => a.shape === target);
+          if (ann) {
+            const cur = (target.text || ann.label || '').trim();
+            const newV = spinPlusValue(cur);
+            if (newV !== cur) {
+              ann.label = newV;
+              target.set('text', newV);
+              setLbl(newV); autoInc(newV);
+              cv.renderAll(); refreshList(); refreshLabelKey(); pushHist();
+            }
+          }
+          return;
+        }
+
+        // 2. Letter label on rect
+        const rectAnn = rectContaining(p.x, p.y);
+        if (rectAnn) {
+          if (!rectAnn.lbl) applyLetterToRect(rectAnn);
+          return;
+        }
+
+        // 3. Paste last annotation
+        if (!lastSelectedAnn) return;
         pasteAnnotationAt(lastSelectedAnn, p.x, p.y);
       });
 
@@ -3975,17 +4004,23 @@
       closeEdit();
     }
 
+    // Pure helper — computes the spin-plus result for a label string without
+    // touching the DOM.  Used by popupSpinPlus and the right-click shortcut.
+    function spinPlusValue(v) {
+      const rm = v.match(/^(\d+)-(\d+)$/);
+      if (rm) return `${rm[1]}-${+rm[2] + 1}`;
+      const nm = v.match(/^(\d+)$/);
+      if (nm) return `${+nm[1]}-${+nm[1] + 1}`;
+      const am = v.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
+      if (am) return `${am[1]}-${nextAlpha(am[2])}`;
+      if (/^[A-Za-z]+$/.test(v)) return `${v}-${nextAlpha(v)}`;
+      return v;
+    }
+
     // Spin +/- within the popup — modifies the edit-input value in place.
     function popupSpinPlus() {
       const inp = document.getElementById('edit-input');
-      const v = inp.value.trim();
-      const rm = v.match(/^(\d+)-(\d+)$/);
-      if (rm) { inp.value = `${rm[1]}-${+rm[2] + 1}`; return; }
-      const nm = v.match(/^(\d+)$/);
-      if (nm) { inp.value = `${+nm[1]}-${+nm[1] + 1}`; return; }
-      const am = v.match(/^([A-Za-z]+)-([A-Za-z]+)$/);
-      if (am) { inp.value = `${am[1]}-${nextAlpha(am[2])}`; return; }
-      if (/^[A-Za-z]+$/.test(v)) { inp.value = `${v}-${nextAlpha(v)}`; return; }
+      inp.value = spinPlusValue(inp.value.trim());
     }
 
     function popupSpinMinus() {
