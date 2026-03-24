@@ -3057,7 +3057,7 @@
         if (obj && !obj._bg) {
           const a = annots.find(a => a.shape === obj || a.lbl === obj);
           if (a) {
-            lastSelectedAnn = a;
+            if (a.kind !== 'block') lastSelectedAnn = a; // blocks are never right-click pasted
             // Highlight this item in the sidebar and scroll it into view
             selectedIds.clear();
             selectedIds.add(a.id);
@@ -3079,7 +3079,7 @@
         if (obj && !obj._bg) {
           const a = annots.find(a => a.shape === obj || a.lbl === obj);
           if (a) {
-            lastSelectedAnn = a;
+            if (a.kind !== 'block') lastSelectedAnn = a; // blocks are never right-click pasted
             selectedIds.clear();
             selectedIds.add(a.id);
             refreshList();
@@ -3643,15 +3643,8 @@
         addCopyControls(cloned);
         cv.add(cloned);
 
-        // Rects always start with no label when duplicated via copy button.
-        // Block labels get the next counter value.
-        let usedLbl = '';
-        if (ann.kind === 'block') {
-          usedLbl = getLbl();
-          cloned.set('text', usedLbl);
-          autoInc(usedLbl);
-        }
-
+        // Preserve text content for text; rects/lines start with no label.
+        const usedLbl = ann.kind === 'text' ? ann.label : '';
         annots.push({ id: cloned._annId, shape: cloned, lbl: null, color, label: usedLbl, kind: ann.kind, notes: '', noBlock: true });
         cv.setActiveObject(cloned);
         refreshList(); refreshCount(); pushHist();
@@ -4272,7 +4265,7 @@
       <span style="opacity:.5;line-height:1">${ICONS[a.kind] || ''}</span>
       <span>${dispLbl}</span>
       <div class="ann-item-actions">
-        <button class="ann-dup" title="Duplicate">${DUP_ICON}</button>
+        ${a.kind !== 'block' ? `<button class="ann-dup" title="Duplicate">${DUP_ICON}</button>` : ''}
         <button class="ann-del" title="Delete">${DEL_ICON}</button>
       </div>`;
 
@@ -4324,15 +4317,8 @@
         cloned.set({ selectable: true, evented: true, angle: ann.shape.angle || 0 });
         addCopyControls(cloned);
         cv.add(cloned);
-        let usedLbl = '';
-        if (ann.kind === 'text') {
-          usedLbl = ann.label; // Preserve exact text; do not increment
-        } else if (ann.kind === 'block') {
-          usedLbl = getLbl();
-          cloned.set('text', usedLbl);
-          autoInc(usedLbl);
-        }
-        // Rects always start with no label when pasted/duplicated.
+        // Preserve text content for text annotations; rects/lines start clean (no label).
+        const usedLbl = ann.kind === 'text' ? ann.label : '';
         annots.push({ id: cloned._annId, shape: cloned, lbl: null,
           color: ann.color, label: usedLbl, kind: ann.kind, notes: '', noBlock: true });
         cv.setActiveObject(cloned);
@@ -4889,15 +4875,8 @@
         cloned.set({ selectable: true, evented: true, angle: ann.shape.angle || 0 });
         addCopyControls(cloned);
         cv.add(cloned);
-        let usedLbl = '';
-        if (ann.kind === 'text') {
-          usedLbl = ann.label; // Preserve exact text; do not increment
-        } else if (ann.kind === 'block') {
-          usedLbl = getLbl();
-          cloned.set('text', usedLbl);
-          autoInc(usedLbl);
-        }
-        // Rects always start with no label when pasted.
+        // Preserve text content for text annotations; rects/lines start clean (no label).
+        const usedLbl = ann.kind === 'text' ? ann.label : '';
         annots.push({ id: cloned._annId, shape: cloned, lbl: null,
           color: ann.color, label: usedLbl, kind: ann.kind, notes: '', noBlock: true });
         cv.setActiveObject(cloned);
