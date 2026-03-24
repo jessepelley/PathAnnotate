@@ -2847,6 +2847,9 @@
           // Create a floating block label. Placement-drag mode starts here: the
           // block follows the cursor while the mouse button is held and is
           // finalised (history pushed, anchor-snap applied) on mouse:up.
+          // ox/oy record the click origin so mouse:up can cancel a bare click
+          // (no drag) the same way rect/line discard tiny shapes.
+          ox = p.x; oy = p.y;
           const lbl = getLbl();
           const txt = new fabric.Text(lbl, {
             left: p.x, top: p.y,
@@ -2993,11 +2996,22 @@
         cv.renderAll();
       });
 
-      cv.on('mouse:up', () => {
+      cv.on('mouse:up', opt => {
         // Finalise block placement drag started in mouse:down.
         if (blockBeingPlaced) {
           const txt = blockBeingPlaced;
           blockBeingPlaced = null;
+          // Cancel if mouse barely moved — consistent with rect/line "tiny" check.
+          const p = opt.scenePoint;
+          if (Math.hypot(p.x - ox, p.y - oy) < 5) {
+            const ann = annots.find(a => a.shape === txt);
+            if (ann) { annots.splice(annots.indexOf(ann), 1); annId--; }
+            cv.remove(txt);
+            cv.discardActiveObject();
+            cv.renderAll();
+            refreshList(); refreshCount();
+            return;
+          }
           const ann = annots.find(a => a.shape === txt);
           if (ann && anchorMode === 'anchor') snapBlockToRect(ann);
           addCopyControls(txt);
