@@ -1409,8 +1409,7 @@
       text-align: right
     }
 
-    #file-input,
-    #json-input {
+    #file-input {
       display: none
     }
   </style>
@@ -1439,30 +1438,15 @@
           <polyline points="7 10 12 15 17 10" />
           <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
-        Import Photo
+        Open
       </button>
       <button class="pill" onclick="exportImg()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-        Export Photo
-      </button>
-      <div class="hdr-sep"></div>
-      <button class="pill" onclick="saveSession()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
           <polyline points="17 21 17 13 7 13 7 21" />
           <polyline points="7 3 7 8 15 8" />
         </svg>
         Save
-      </button>
-      <button class="pill" onclick="document.getElementById('json-input').click()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5" />
-        </svg>
-        Load
       </button>
       <div class="hdr-sep"></div>
 
@@ -1838,7 +1822,7 @@
           <li>Rectangle, line, and block tools</li>
           <li>Title with case number and specimen</li>
           <li>Block key panel with per-block notes and clipboard copy</li>
-          <li>Save/load JSON sessions and export annotated images</li>
+          <li>Save annotated images as PNG with embedded editable metadata</li>
           <li>Undo/redo, light/dark theme, drag-and-drop image import</li>
         </ul>
       </div>
@@ -1905,7 +1889,7 @@
               <div class="intro-step-num">5</div>
               <div class="intro-step-body">
                 <strong>Export or save</strong>
-                <span>Click <em>Export Photo</em> to save the annotated image, or <em>Save</em> to save a session file you can reload later.</span>
+                <span>Click <em>Save</em> to export a PNG with your annotations. Re-open it later in PathAnnotate to continue editing.</span>
               </div>
             </div>
           </div>
@@ -1949,7 +1933,6 @@
   </div>
 
   <input type="file" id="file-input" accept="image/*">
-  <input type="file" id="json-input" accept=".json">
 
   <script>
     'use strict';
@@ -2530,7 +2513,6 @@
     //  IMAGE LOADING
     // ═══════════════════════════════════════════════════════
     document.getElementById('file-input').addEventListener('change', e => { if (e.target.files[0]) readImg(e.target.files[0]); });
-    document.getElementById('json-input').addEventListener('change', e => { if (e.target.files[0]) readSession(e.target.files[0]); });
 
     const dropArea = document.getElementById('canvas-area');
     dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.style.outline = '2px dashed var(--accent)'; });
@@ -2538,15 +2520,38 @@
     dropArea.addEventListener('drop', e => {
       e.preventDefault(); dropArea.style.outline = '';
       const file = e.dataTransfer.files[0]; if (!file) return;
-      if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') readSession(file);
-      else readImg(file);
+      readImg(file);
     });
 
     function readImg(file) {
-      const r = new FileReader();
-      r.onload = ev => {
-        const dataURL = ev.target.result;
-        // If annotations already exist, preserve them — just swap the background
+      // First, read as ArrayBuffer to check for PathAnnotate PNG metadata
+      const abReader = new FileReader();
+      abReader.onload = async (ev) => {
+        const buf = ev.target.result;
+        const src = new Uint8Array(buf);
+        const isPNG = src.length > 8 && src[0] === 0x89 && src[1] === 0x50 && src[2] === 0x4E && src[3] === 0x47;
+
+        if (isPNG && hasPathAnnotateMeta(buf)) {
+          // Extract metadata and restore editable session
+          const payload = await extractPathAnnotateMeta(buf);
+          if (payload && payload.session) {
+            if (payload.originalImage) {
+              imgDataURL = payload.originalImage;
+              savePhotoToIDB(imgDataURL);
+            }
+            applySessionObject(payload.session);
+            return;
+          }
+        }
+
+        // No metadata — treat as a normal image
+        const blob = new Blob([buf], { type: file.type || 'image/png' });
+        const dataURL = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onload = e => resolve(e.target.result);
+          r.readAsDataURL(blob);
+        });
+
         if (cv && annots.length > 0) {
           replaceBackground(dataURL, file.name);
         } else {
@@ -2555,7 +2560,7 @@
           initCanvas(dataURL, file.name);
         }
       };
-      r.readAsDataURL(file);
+      abReader.readAsArrayBuffer(file);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -4976,31 +4981,6 @@
       cv.renderAll(); pushHist(); refreshLabelKey();
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  SAVE / LOAD SESSION
-    // ═══════════════════════════════════════════════════════
-    function saveSession() {
-      if (!cv) { alert('Nothing to save.'); return; }
-      cv.discardActiveObject(); cv.renderAll();
-      const title = getTitleText();
-      const session = {
-        v: 5, imageName: document.getElementById('file-name').textContent,
-        // imageDataURL intentionally omitted — export image separately with Export Photo.
-        // Background image src is also stripped from canvasJSON to keep file size small.
-        // On load the bg is recreated from the current image or a placeholder.
-        canvasJSON: getCanvasJSON(),
-        canvasWidth: cv.width, canvasHeight: cv.height,
-        meta: snapMeta(),
-        lbl: getLbl(), annId,
-        titleText: title || null,
-        caseNumber: caseNum, specimen: specimenText,
-      };
-      const fname = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'pathannotate-session') + '.json';
-      const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = fname; a.click();
-    }
-
     function makePlaceholderDataURL(w, h) {
       const c = document.createElement('canvas');
       c.width = w || 800; c.height = h || 600;
@@ -5074,37 +5054,262 @@
       });
     }
 
-    function readSession(file) {
-      const r = new FileReader();
-      r.onload = ev => {
-        let s; try { s = JSON.parse(ev.target.result); } catch { alert('Invalid session file.'); return; }
-        applySessionObject(s);
-      };
-      r.readAsText(file);
+    // ═══════════════════════════════════════════════════════
+    //  PNG CHUNK UTILITIES
+    // ═══════════════════════════════════════════════════════
+
+    // CRC32 lookup table (used for PNG chunk checksums)
+    const _crc32Table = (() => {
+      const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c;
+      }
+      return t;
+    })();
+
+    function crc32(buf) {
+      let crc = 0xFFFFFFFF;
+      for (let i = 0; i < buf.length; i++) crc = _crc32Table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+      return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    /** Build a complete PNG chunk: [4-byte length][4-byte type][data][4-byte CRC] */
+    function makePNGChunk(type, data) {
+      const typeBytes = new TextEncoder().encode(type);           // 4 bytes
+      const len = data.byteLength;
+      const buf = new Uint8Array(4 + 4 + len + 4);
+      const dv = new DataView(buf.buffer);
+      dv.setUint32(0, len);                                       // length
+      buf.set(typeBytes, 4);                                       // type
+      buf.set(data instanceof Uint8Array ? data : new Uint8Array(data), 8); // data
+      const crcInput = new Uint8Array(4 + len);
+      crcInput.set(typeBytes, 0);
+      crcInput.set(data instanceof Uint8Array ? data : new Uint8Array(data), 4);
+      dv.setUint32(8 + len, crc32(crcInput));                     // CRC
+      return buf;
+    }
+
+    /** Build tEXt chunk data: keyword\0value (Latin-1) */
+    function makeTEXtData(keyword, value) {
+      const kw = new TextEncoder().encode(keyword);
+      const val = new TextEncoder().encode(value);
+      const buf = new Uint8Array(kw.length + 1 + val.length);
+      buf.set(kw, 0);
+      // buf[kw.length] = 0; // null separator (already 0)
+      buf.set(val, kw.length + 1);
+      return buf;
+    }
+
+    /** Build zTXt chunk data: keyword\0compressionMethod\0compressedData */
+    function makeZTXtData(keyword, compressedBytes) {
+      const kw = new TextEncoder().encode(keyword);
+      const buf = new Uint8Array(kw.length + 1 + 1 + compressedBytes.length);
+      buf.set(kw, 0);
+      // buf[kw.length] = 0;     // null separator
+      buf[kw.length + 1] = 0;    // compression method 0 = deflate
+      buf.set(compressedBytes, kw.length + 2);
+      return buf;
+    }
+
+    /** Compress text using browser CompressionStream (deflate) */
+    async function deflateText(text) {
+      const input = new TextEncoder().encode(text);
+      const cs = new CompressionStream('deflate');
+      const writer = cs.writable.getWriter();
+      writer.write(input);
+      writer.close();
+      const chunks = [];
+      const reader = cs.readable.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const total = chunks.reduce((s, c) => s + c.length, 0);
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return out;
+    }
+
+    /** Decompress data using browser DecompressionStream (deflate) */
+    async function inflateData(compressedBytes) {
+      const ds = new DecompressionStream('deflate');
+      const writer = ds.writable.getWriter();
+      writer.write(compressedBytes);
+      writer.close();
+      const chunks = [];
+      const reader = ds.readable.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const total = chunks.reduce((s, c) => s + c.length, 0);
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return new TextDecoder().decode(out);
+    }
+
+    /** Insert chunks into a PNG ArrayBuffer just before IEND */
+    function insertPNGChunks(pngBuf, chunks) {
+      const src = new Uint8Array(pngBuf);
+      // Find IEND: scan backwards for 'IEND' type (0x49454E44)
+      let iendPos = -1;
+      for (let i = src.length - 12; i >= 8; i--) {
+        if (src[i + 4] === 0x49 && src[i + 5] === 0x45 && src[i + 6] === 0x4E && src[i + 7] === 0x44) {
+          iendPos = i;
+          break;
+        }
+      }
+      if (iendPos < 0) throw new Error('PNG IEND not found');
+      const before = src.slice(0, iendPos);
+      const iend = src.slice(iendPos);
+      const totalExtra = chunks.reduce((s, c) => s + c.length, 0);
+      const out = new Uint8Array(before.length + totalExtra + iend.length);
+      out.set(before, 0);
+      let off = before.length;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      out.set(iend, off);
+      return out.buffer;
+    }
+
+    /** Read PNG chunks, returning an array of { type, data } */
+    function readPNGChunks(pngBuf) {
+      const src = new Uint8Array(pngBuf);
+      const results = [];
+      let pos = 8; // skip PNG signature
+      while (pos < src.length) {
+        const dv = new DataView(src.buffer, src.byteOffset + pos, 8);
+        const len = dv.getUint32(0);
+        const type = String.fromCharCode(src[pos + 4], src[pos + 5], src[pos + 6], src[pos + 7]);
+        const data = src.slice(pos + 8, pos + 8 + len);
+        results.push({ type, data });
+        pos += 12 + len; // length(4) + type(4) + data(len) + crc(4)
+        if (type === 'IEND') break;
+      }
+      return results;
+    }
+
+    /** Check if an ArrayBuffer is a PNG with PathAnnotate metadata */
+    function hasPathAnnotateMeta(pngBuf) {
+      const src = new Uint8Array(pngBuf);
+      // Check PNG signature
+      if (src[0] !== 0x89 || src[1] !== 0x50 || src[2] !== 0x4E || src[3] !== 0x47) return false;
+      // Quick scan for 'tEXt' chunks with 'PathAnnotate' keyword
+      const chunks = readPNGChunks(pngBuf);
+      return chunks.some(c => {
+        if (c.type !== 'tEXt') return false;
+        const nullIdx = c.data.indexOf(0);
+        if (nullIdx < 0) return false;
+        const kw = new TextDecoder().decode(c.data.slice(0, nullIdx));
+        return kw === 'PathAnnotate';
+      });
+    }
+
+    /** Extract PathAnnotate metadata from a PNG ArrayBuffer. Returns parsed payload or null. */
+    async function extractPathAnnotateMeta(pngBuf) {
+      try {
+        const chunks = readPNGChunks(pngBuf);
+        for (const c of chunks) {
+          if (c.type !== 'zTXt') continue;
+          const nullIdx = c.data.indexOf(0);
+          if (nullIdx < 0) continue;
+          const kw = new TextDecoder().decode(c.data.slice(0, nullIdx));
+          if (kw !== 'PathAnnotateData') continue;
+          // byte after null is compression method (0 = deflate), then compressed data
+          const compressed = c.data.slice(nullIdx + 2);
+          const json = await inflateData(compressed);
+          return JSON.parse(json);
+        }
+      } catch (e) { console.warn('Failed to extract PathAnnotate metadata:', e); }
+      return null;
+    }
+
+    /** Render the original image at viewport resolution as a PNG dataURL */
+    function renderViewportOriginal() {
+      return new Promise((resolve) => {
+        if (!imgDataURL) { resolve(null); return; }
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = baseW; c.height = baseH;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, baseW, baseH);
+          resolve(c.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(null);
+        img.src = imgDataURL;
+      });
+    }
+
+    /** Convert a dataURL to an ArrayBuffer */
+    function dataURLToArrayBuffer(dataURL) {
+      const binary = atob(dataURL.split(',')[1]);
+      const buf = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+      return buf.buffer;
     }
 
     // ═══════════════════════════════════════════════════════
-    //  EXPORT — full-resolution JPEG
+    //  EXPORT — full-resolution PNG with embedded metadata
     // ═══════════════════════════════════════════════════════
     /*
-      The blur issue is caused by exporting at the displayed (scaled-down) canvas
-      resolution. Fix: export at the ORIGINAL image resolution using a multiplier.
+      Exports the annotated canvas as a full-resolution PNG. Two custom chunks
+      are embedded before IEND:
+        1. tEXt "PathAnnotate" = "1"  — lightweight marker for detection
+        2. zTXt "PathAnnotateData"    — deflate-compressed JSON payload with
+           the session data and the original (unannotated) image at viewport
+           resolution, allowing PathAnnotate to restore an editable session.
     */
-    function exportImg() {
+    async function exportImg() {
       if (!cv) return;
       cv.discardActiveObject(); cv.renderAll();
 
-      // Determine original image dimensions from the stored dataURL
       const img = new Image();
-      img.onload = () => {
-        const scaleX = img.width / cv.width;
-        const scaleY = img.height / cv.height;
-        const mult = Math.max(scaleX, scaleY, 1); // at minimum 1×
-        const dataURL = cv.toDataURL({ format: 'jpeg', quality: 0.96, multiplier: mult });
-        const title = getTitleText();
-        const fname = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.jpg';
-        const a = document.createElement('a');
-        a.href = dataURL; a.download = fname; a.click();
+      img.onload = async () => {
+        try {
+          // 1. Render flattened PNG at full resolution
+          const scaleX = img.width / cv.width;
+          const scaleY = img.height / cv.height;
+          const mult = Math.max(scaleX, scaleY, 1);
+          const flatDataURL = cv.toDataURL({ format: 'png', multiplier: mult });
+          let pngBuf = dataURLToArrayBuffer(flatDataURL);
+
+          // 2. Build metadata payload
+          const originalImage = await renderViewportOriginal();
+          const title = getTitleText();
+          const session = {
+            v: 5, imageName: document.getElementById('file-name').textContent,
+            canvasJSON: getCanvasJSON(),
+            canvasWidth: cv.width, canvasHeight: cv.height,
+            meta: snapMeta(), lbl: getLbl(), annId,
+            titleText: title || null,
+            caseNumber: caseNum, specimen: specimenText,
+          };
+          const payload = { v: 1, session, originalImage };
+          const payloadJSON = JSON.stringify(payload);
+
+          // 3. Compress and build chunks
+          const compressed = await deflateText(payloadJSON);
+          const markerChunk = makePNGChunk('tEXt', makeTEXtData('PathAnnotate', '1'));
+          const dataChunk = makePNGChunk('zTXt', makeZTXtData('PathAnnotateData', compressed));
+
+          // 4. Insert chunks and download
+          pngBuf = insertPNGChunks(pngBuf, [markerChunk, dataChunk]);
+          const blob = new Blob([pngBuf], { type: 'image/png' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.png';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch (e) {
+          console.error('Export failed:', e);
+          alert('Export failed. See console for details.');
+        }
       };
       img.src = imgDataURL || '';
     }
