@@ -5265,10 +5265,11 @@
            the session data and the original image (JPEG-compressed, full
            resolution), allowing PathAnnotate to restore an editable session.
 
-      Shadow compensation: Fabric.js scales shadow blur/offset with the export
-      multiplier, which makes text look diffused at full resolution. Before
-      rendering we divide shadow values by the multiplier so they stay at
-      viewport-appropriate sizes in the final image.
+      Rendering strategy: Rather than relying on Fabric's toDataURL multiplier
+      (which can produce blurry text in v7), we temporarily zoom the canvas to
+      the full export resolution and render at 1×. This forces the canvas 2D
+      text renderer to draw glyphs at their actual target pixel size, producing
+      crisp annotations that match the on-screen quality.
     */
     async function exportImg() {
       if (!cv) return;
@@ -5277,40 +5278,37 @@
       const img = new Image();
       img.onload = async () => {
         try {
-          // 1. Calculate export multiplier
-          const scaleX = img.width / cv.width;
-          const scaleY = img.height / cv.height;
-          const mult = Math.max(scaleX, scaleY, 1);
+          // 1. Calculate export scale
+          const mult = Math.max(img.width / baseW, img.height / baseH, 1);
+          const exportW = Math.round(baseW * mult);
+          const exportH = Math.round(baseH * mult);
 
-          // 2. Compensate shadows so they stay crisp at full resolution.
-          //    Fabric scales shadow blur/offset by the multiplier, making text
-          //    look fuzzy. We pre-divide so the final values match viewport size.
-          const savedShadows = [];
-          cv.getObjects().forEach(obj => {
-            if (obj._bg || !obj.shadow) return;
-            const s = obj.shadow;
-            savedShadows.push({ obj, shadow: s });
-            obj.shadow = new fabric.Shadow({
-              color: s.color,
-              blur: s.blur / mult,
-              offsetX: s.offsetX / mult,
-              offsetY: s.offsetY / mult,
-            });
-          });
+          // 2. Save current canvas state
+          const savedZoom = cv.getZoom();
+          const savedW = cv.getWidth();
+          const savedH = cv.getHeight();
 
-          // 3. Render flattened PNG at full resolution
+          // 3. Temporarily zoom canvas to full export resolution.
+          //    This re-renders all objects (text, shapes) at native resolution
+          //    instead of scaling up a viewport-sized rasterization.
+          cv.setZoom(mult);
+          cv.setDimensions({ width: exportW, height: exportH });
+          cv.renderAll();
+
+          // 4. Render flattened PNG at 1× (zoom handles the scaling)
           const flatDataURL = cv.toDataURL({
             format: 'png',
-            multiplier: mult,
+            multiplier: 1,
             enableRetinaScaling: false,
           });
           let pngBuf = dataURLToArrayBuffer(flatDataURL);
 
-          // 4. Restore original shadows
-          savedShadows.forEach(({ obj, shadow }) => { obj.shadow = shadow; });
+          // 5. Restore canvas to original state
+          cv.setZoom(savedZoom);
+          cv.setDimensions({ width: savedW, height: savedH });
           cv.renderAll();
 
-          // 5. Build metadata payload — original image as JPEG to keep size down
+          // 6. Build metadata payload — original image as JPEG to keep size down
           const originalImage = await renderOriginalAsJPEG(0.85);
           const title = getTitleText();
           const session = {
@@ -5324,12 +5322,12 @@
           const payload = { v: 1, session, originalImage };
           const payloadJSON = JSON.stringify(payload);
 
-          // 6. Compress and build chunks
+          // 7. Compress and build chunks
           const compressed = await deflateText(payloadJSON);
           const markerChunk = makePNGChunk('tEXt', makeTEXtData('PathAnnotate', '1'));
           const dataChunk = makePNGChunk('zTXt', makeZTXtData('PathAnnotateData', compressed));
 
-          // 7. Insert chunks and download
+          // 8. Insert chunks and download
           pngBuf = insertPNGChunks(pngBuf, [markerChunk, dataChunk]);
           const blob = new Blob([pngBuf], { type: 'image/png' });
           const a = document.createElement('a');
