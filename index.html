@@ -5255,21 +5255,28 @@
     }
 
     // ═══════════════════════════════════════════════════════
-    //  EXPORT — full-resolution PNG with embedded metadata
+    //  EXPORT — PNG with embedded metadata
     // ═══════════════════════════════════════════════════════
     /*
-      Exports the annotated canvas as a full-resolution PNG. Two custom chunks
-      are embedded before IEND:
+      Exports the annotated canvas as a PNG. Two custom chunks are embedded
+      before IEND:
         1. tEXt "PathAnnotate" = "1"  — lightweight marker for detection
         2. zTXt "PathAnnotateData"    — deflate-compressed JSON payload with
            the session data and the original image (JPEG-compressed, full
            resolution), allowing PathAnnotate to restore an editable session.
 
-      Rendering strategy: Rather than relying on Fabric's toDataURL multiplier
-      (which can produce blurry text in v7), we temporarily zoom the canvas to
-      the full export resolution and render at 1×. This forces the canvas 2D
-      text renderer to draw glyphs at their actual target pixel size, producing
-      crisp annotations that match the on-screen quality.
+      Rendering strategy: Fabric.js v7's toCanvasElement forcibly disables
+      retina scaling on its offscreen canvas (line 1159 of StaticCanvas.mjs),
+      so text rendered there lacks the browser's DPR-aware font hinting and
+      subpixel anti-aliasing — making annotations look fuzzy compared to the
+      on-screen rendering.
+
+      Fix: composite approach —
+        1. Draw the full-resolution original image on an offscreen canvas
+        2. Capture ONLY the annotation layer from the on-screen canvas at
+           retina quality (the actual browser-rendered pixels)
+        3. Scale and draw the annotation layer on top of the full-res image
+      This gives full-resolution background with screen-quality annotations.
     */
     async function exportImg() {
       if (!cv) return;
@@ -5278,43 +5285,59 @@
       const img = new Image();
       img.onload = async () => {
         try {
-          // 1. Calculate export scale
-          const mult = Math.max(img.width / baseW, img.height / baseH, 1);
-          const exportW = Math.round(baseW * mult);
-          const exportH = Math.round(baseH * mult);
-
-          // 2. Save current canvas state
+          // 1. Save current canvas state and ensure 100% zoom
           const savedZoom = cv.getZoom();
           const savedW = cv.getWidth();
           const savedH = cv.getHeight();
+          cv.setZoom(1);
+          cv.setDimensions({ width: baseW, height: baseH });
 
-          // 3. Temporarily zoom canvas to full export resolution.
-          //    This re-renders all objects (text, shapes) at native resolution
-          //    instead of scaling up a viewport-sized rasterization.
-          cv.setZoom(mult);
-          cv.setDimensions({ width: exportW, height: exportH });
+          // 2. Hide background image, render annotations on transparent background
+          const bgObj = cv.getObjects().find(o => o._bg);
+          if (bgObj) bgObj.set('opacity', 0);
           cv.renderAll();
 
-          // 4. Render flattened PNG at 1× (zoom handles the scaling)
-          const flatDataURL = cv.toDataURL({
-            format: 'png',
-            multiplier: 1,
-            enableRetinaScaling: false,
-          });
-          let pngBuf = dataURLToArrayBuffer(flatDataURL);
+          // 3. Capture the on-screen annotation layer at retina quality
+          //    lowerCanvasEl is the actual browser-rendered HTMLCanvasElement,
+          //    which includes DPR-aware font hinting and subpixel anti-aliasing.
+          const screenCanvas = cv.lowerCanvasEl;
+          const annotW = screenCanvas.width;   // retina-scaled
+          const annotH = screenCanvas.height;  // retina-scaled
 
-          // 5. Restore canvas to original state
+          // 4. Copy annotation pixels to a temporary canvas (screen render disappears on restore)
+          const annotCanvas = document.createElement('canvas');
+          annotCanvas.width = annotW;
+          annotCanvas.height = annotH;
+          annotCanvas.getContext('2d').drawImage(screenCanvas, 0, 0);
+
+          // 5. Restore background and canvas state
+          if (bgObj) bgObj.set('opacity', 1);
           cv.setZoom(savedZoom);
           cv.setDimensions({ width: savedW, height: savedH });
           cv.renderAll();
 
-          // 6. Build metadata payload — original image as JPEG to keep size down
+          // 6. Composite: full-res original + retina annotation layer
+          const outCanvas = document.createElement('canvas');
+          outCanvas.width = img.width;
+          outCanvas.height = img.height;
+          const ctx = outCanvas.getContext('2d');
+
+          // Draw full-resolution original image
+          ctx.drawImage(img, 0, 0, img.width, img.height);
+
+          // Scale annotation layer to cover full image
+          ctx.drawImage(annotCanvas, 0, 0, img.width, img.height);
+
+          const flatDataURL = outCanvas.toDataURL('image/png');
+          let pngBuf = dataURLToArrayBuffer(flatDataURL);
+
+          // 7. Build metadata payload — original image as JPEG to keep size down
           const originalImage = await renderOriginalAsJPEG(0.85);
           const title = getTitleText();
           const session = {
             v: 5, imageName: document.getElementById('file-name').textContent,
             canvasJSON: getCanvasJSON(),
-            canvasWidth: cv.width, canvasHeight: cv.height,
+            canvasWidth: baseW, canvasHeight: baseH,
             meta: snapMeta(), lbl: getLbl(), annId,
             titleText: title || null,
             caseNumber: caseNum, specimen: specimenText,
@@ -5322,12 +5345,12 @@
           const payload = { v: 1, session, originalImage };
           const payloadJSON = JSON.stringify(payload);
 
-          // 7. Compress and build chunks
+          // 8. Compress and build chunks
           const compressed = await deflateText(payloadJSON);
           const markerChunk = makePNGChunk('tEXt', makeTEXtData('PathAnnotate', '1'));
           const dataChunk = makePNGChunk('zTXt', makeZTXtData('PathAnnotateData', compressed));
 
-          // 8. Insert chunks and download
+          // 9. Insert chunks and download
           pngBuf = insertPNGChunks(pngBuf, [markerChunk, dataChunk]);
           const blob = new Blob([pngBuf], { type: 'image/png' });
           const a = document.createElement('a');
