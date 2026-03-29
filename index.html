@@ -5229,17 +5229,17 @@
       return null;
     }
 
-    /** Render the original image at viewport resolution as a PNG dataURL */
-    function renderViewportOriginal() {
+    /** Render the original image as a JPEG dataURL for embedding (preserves full resolution) */
+    function renderOriginalAsJPEG(quality) {
       return new Promise((resolve) => {
         if (!imgDataURL) { resolve(null); return; }
         const img = new Image();
         img.onload = () => {
           const c = document.createElement('canvas');
-          c.width = baseW; c.height = baseH;
+          c.width = img.width; c.height = img.height;
           const ctx = c.getContext('2d');
-          ctx.drawImage(img, 0, 0, baseW, baseH);
-          resolve(c.toDataURL('image/png'));
+          ctx.drawImage(img, 0, 0);
+          resolve(c.toDataURL('image/jpeg', quality || 0.85));
         };
         img.onerror = () => resolve(null);
         img.src = imgDataURL;
@@ -5262,8 +5262,13 @@
       are embedded before IEND:
         1. tEXt "PathAnnotate" = "1"  — lightweight marker for detection
         2. zTXt "PathAnnotateData"    — deflate-compressed JSON payload with
-           the session data and the original (unannotated) image at viewport
-           resolution, allowing PathAnnotate to restore an editable session.
+           the session data and the original image (JPEG-compressed, full
+           resolution), allowing PathAnnotate to restore an editable session.
+
+      Shadow compensation: Fabric.js scales shadow blur/offset with the export
+      multiplier, which makes text look diffused at full resolution. Before
+      rendering we divide shadow values by the multiplier so they stay at
+      viewport-appropriate sizes in the final image.
     */
     async function exportImg() {
       if (!cv) return;
@@ -5272,15 +5277,41 @@
       const img = new Image();
       img.onload = async () => {
         try {
-          // 1. Render flattened PNG at full resolution
+          // 1. Calculate export multiplier
           const scaleX = img.width / cv.width;
           const scaleY = img.height / cv.height;
           const mult = Math.max(scaleX, scaleY, 1);
-          const flatDataURL = cv.toDataURL({ format: 'png', multiplier: mult });
+
+          // 2. Compensate shadows so they stay crisp at full resolution.
+          //    Fabric scales shadow blur/offset by the multiplier, making text
+          //    look fuzzy. We pre-divide so the final values match viewport size.
+          const savedShadows = [];
+          cv.getObjects().forEach(obj => {
+            if (obj._bg || !obj.shadow) return;
+            const s = obj.shadow;
+            savedShadows.push({ obj, shadow: s });
+            obj.shadow = new fabric.Shadow({
+              color: s.color,
+              blur: s.blur / mult,
+              offsetX: s.offsetX / mult,
+              offsetY: s.offsetY / mult,
+            });
+          });
+
+          // 3. Render flattened PNG at full resolution
+          const flatDataURL = cv.toDataURL({
+            format: 'png',
+            multiplier: mult,
+            enableRetinaScaling: false,
+          });
           let pngBuf = dataURLToArrayBuffer(flatDataURL);
 
-          // 2. Build metadata payload
-          const originalImage = await renderViewportOriginal();
+          // 4. Restore original shadows
+          savedShadows.forEach(({ obj, shadow }) => { obj.shadow = shadow; });
+          cv.renderAll();
+
+          // 5. Build metadata payload — original image as JPEG to keep size down
+          const originalImage = await renderOriginalAsJPEG(0.85);
           const title = getTitleText();
           const session = {
             v: 5, imageName: document.getElementById('file-name').textContent,
@@ -5293,12 +5324,12 @@
           const payload = { v: 1, session, originalImage };
           const payloadJSON = JSON.stringify(payload);
 
-          // 3. Compress and build chunks
+          // 6. Compress and build chunks
           const compressed = await deflateText(payloadJSON);
           const markerChunk = makePNGChunk('tEXt', makeTEXtData('PathAnnotate', '1'));
           const dataChunk = makePNGChunk('zTXt', makeZTXtData('PathAnnotateData', compressed));
 
-          // 4. Insert chunks and download
+          // 7. Insert chunks and download
           pngBuf = insertPNGChunks(pngBuf, [markerChunk, dataChunk]);
           const blob = new Blob([pngBuf], { type: 'image/png' });
           const a = document.createElement('a');
