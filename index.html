@@ -1539,6 +1539,7 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
         </svg>Light
       </button>
+      <button class="pill" onclick="openInfo()" title="Session Info">&#8505;</button>
       <button class="pill" onclick="openIntro()" title="Help / Introduction">?</button>
     </div>
   </header>
@@ -1828,6 +1829,17 @@
     </div>
   </div>
 
+  <!-- Info / debug modal -->
+  <div class="modal-bg" id="info-modal">
+    <div class="modal" style="width:500px">
+      <h3>Session Info</h3>
+      <div id="info-content" style="font-family:'DM Mono',monospace;font-size:11px;line-height:1.9;white-space:pre-wrap;max-height:60vh;overflow-y:auto"></div>
+      <div class="modal-acts">
+        <button class="m-ok" onclick="document.getElementById('info-modal').classList.remove('open')">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Changelog modal -->
   <div class="modal-bg" id="changelog-modal">
     <div class="modal" style="width:460px">
@@ -1868,7 +1880,7 @@
           <li>Rectangle, line, and block tools</li>
           <li>Title with case number and specimen</li>
           <li>Block key panel with per-block notes and clipboard copy</li>
-          <li>Save annotated images as PNG and export annotation data</li>
+          <li>Save annotated images as JPEG and export annotation data</li>
           <li>Undo/redo, light/dark theme, drag-and-drop image import</li>
         </ul>
       </div>
@@ -1935,7 +1947,7 @@
               <div class="intro-step-num">5</div>
               <div class="intro-step-body">
                 <strong>Export</strong>
-                <span>Click <em>Export Photo</em> to export a .PNG photo file with your annotations. Re-open it later in PathAnnotate to continue editing.</span>
+                <span>Click <em>Export Photo</em> to export a .JPEG photo file with your annotations. Re-open it later in PathAnnotate to continue editing.</span>
               </div>
             </div>
           </div>
@@ -2569,16 +2581,16 @@
     });
 
     function readImg(file) {
-      // First, read as ArrayBuffer to check for PathAnnotate PNG metadata
+      // Read as ArrayBuffer to check for PathAnnotate JPEG metadata
       const abReader = new FileReader();
       abReader.onload = async (ev) => {
         const buf = ev.target.result;
         const src = new Uint8Array(buf);
-        const isPNG = src.length > 8 && src[0] === 0x89 && src[1] === 0x50 && src[2] === 0x4E && src[3] === 0x47;
+        const isJPEG = src.length > 2 && src[0] === 0xFF && src[1] === 0xD8;
 
-        if (isPNG && hasPathAnnotateMeta(buf)) {
-          // Extract metadata and restore editable session
-          const payload = await extractPathAnnotateMeta(buf);
+        // Check for PathAnnotate JPEG metadata (embedded session data)
+        if (isJPEG && hasPathAnnotateJPEGMeta(buf)) {
+          const payload = await extractPathAnnotateJPEGMeta(buf);
           if (payload && payload.session) {
             if (payload.originalImage) {
               imgDataURL = payload.originalImage;
@@ -2815,16 +2827,22 @@
       }, { passive: false });
     })();
 
-    function initCanvas(dataURL, name, afterCb) {
+    function initCanvas(dataURL, name, afterCb, forceDims) {
       const img = new Image();
       img.onload = () => {
         document.getElementById('drop-zone').style.display = 'none';
         document.getElementById('canvas-wrapper').style.display = 'block';
 
-        const area = document.getElementById('canvas-area');
-        const maxW = area.clientWidth - 40, maxH = area.clientHeight - 40;
-        const sc = Math.min(maxW / img.width, maxH / img.height); // fill viewport; no 1x cap
-        const W = Math.round(img.width * sc), H = Math.round(img.height * sc);
+        let W, H;
+        if (forceDims && forceDims.width && forceDims.height) {
+          W = forceDims.width;
+          H = forceDims.height;
+        } else {
+          const area = document.getElementById('canvas-area');
+          const maxW = area.clientWidth - 40, maxH = area.clientHeight - 40;
+          const sc = Math.min(maxW / img.width, maxH / img.height); // fill viewport; no 1x cap
+          W = Math.round(img.width * sc); H = Math.round(img.height * sc);
+        }
 
         if (!cv) {
           cv = new fabric.Canvas('main-canvas', { selection: false, preserveObjectStacking: true });
@@ -4670,7 +4688,7 @@
         const session = {
           v: 5, imageName: document.getElementById('file-name').textContent,
           canvasJSON: getCanvasJSON(),   // bg stripped — use imgDataURL separately
-          canvasWidth: cv.width, canvasHeight: cv.height,
+          canvasWidth: baseW, canvasHeight: baseH,
           meta: snapMeta(), lbl: getLbl(), annId,
           titleText: getTitleText() || null,
           caseNumber: caseNum, specimen: specimenText,
@@ -4952,6 +4970,86 @@
       document.getElementById('intro-modal').classList.add('open');
     }
 
+    async function openInfo() {
+      const lines = [];
+
+      // Image info
+      lines.push('── IMAGE ──────────────────────────');
+      const fileName = document.getElementById('file-name').textContent;
+      lines.push('File name:      ' + (fileName || '(none)'));
+      if (imgDataURL) {
+        const m = imgDataURL.match(/^data:(image\/\w+)/);
+        lines.push('Stored format:  ' + (m ? m[1] : 'unknown'));
+        const sizeKB = Math.round(imgDataURL.length * 0.75 / 1024);
+        lines.push('Stored size:    ~' + sizeKB.toLocaleString() + ' KB (base64 decoded)');
+        // Get original image dimensions
+        const dims = document.getElementById('st-dims').textContent;
+        lines.push('Original dims:  ' + (dims || '(unknown)'));
+      } else {
+        lines.push('(no image loaded)');
+      }
+
+      // Canvas info
+      lines.push('');
+      lines.push('── CANVAS ─────────────────────────');
+      lines.push('Base (unzoomed): ' + baseW + ' × ' + baseH + ' px');
+      lines.push('Current zoom:    ' + currentZoom + '%');
+      if (cv) {
+        lines.push('Actual pixels:   ' + cv.width + ' × ' + cv.height + ' px');
+        const lower = cv.lowerCanvasEl;
+        if (lower) {
+          lines.push('Backing buffer:  ' + lower.width + ' × ' + lower.height + ' px (DPR: ' + (window.devicePixelRatio || 1) + ')');
+        }
+      }
+
+      // Annotations info
+      lines.push('');
+      lines.push('── ANNOTATIONS ────────────────────');
+      lines.push('Count:           ' + annots.length);
+      lines.push('Next annId:      ' + annId);
+      if (annots.length > 0) {
+        const kinds = {};
+        annots.forEach(a => { kinds[a.kind] = (kinds[a.kind] || 0) + 1; });
+        lines.push('By type:         ' + Object.entries(kinds).map(([k, v]) => k + ':' + v).join(', '));
+      }
+
+      // Storage info
+      lines.push('');
+      lines.push('── STORAGE ────────────────────────');
+      const lsRaw = localStorage.getItem('pathannotate_v5');
+      if (lsRaw) {
+        lines.push('localStorage:    yes (' + Math.round(lsRaw.length / 1024).toLocaleString() + ' KB)');
+      } else {
+        lines.push('localStorage:    (empty)');
+      }
+      try {
+        const db = await openPhotoIDB();
+        const tx = db.transaction('photo', 'readonly');
+        const store = tx.objectStore('photo');
+        const req = store.get('current');
+        const idbResult = await new Promise(r => { req.onsuccess = () => r(req.result); req.onerror = () => r(null); });
+        if (idbResult) {
+          const idbSize = idbResult.size ? Math.round(idbResult.size / 1024) : '?';
+          lines.push('IndexedDB photo: yes (' + idbSize.toLocaleString() + ' KB)');
+        } else {
+          lines.push('IndexedDB photo: (empty)');
+        }
+        db.close();
+      } catch (e) {
+        lines.push('IndexedDB photo: (error reading)');
+      }
+
+      // Export format info
+      lines.push('');
+      lines.push('── EXPORT FORMAT ──────────────────');
+      lines.push('Output:          JPEG (quality 0.92)');
+      lines.push('Metadata:        APP2 segments (deflate-compressed)');
+      lines.push('Session version: v5');
+
+      document.getElementById('info-content').textContent = lines.join('\n');
+      document.getElementById('info-modal').classList.add('open');
+    }
+
     function openTitle() {
       document.getElementById('case-num-input').value = caseNum;
       document.getElementById('specimen-input').value = specimenText;
@@ -4963,6 +5061,9 @@
     document.getElementById('title-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeTitle(); });
     document.getElementById('privacy-modal').addEventListener('click', e => {
       if (e.target === e.currentTarget) document.getElementById('privacy-modal').classList.remove('open');
+    });
+    document.getElementById('info-modal').addEventListener('click', e => {
+      if (e.target === e.currentTarget) document.getElementById('info-modal').classList.remove('open');
     });
     document.getElementById('changelog-modal').addEventListener('click', e => {
       if (e.target === e.currentTarget) document.getElementById('changelog-modal').classList.remove('open');
@@ -5057,6 +5158,11 @@
       imgDataURL = useDataURL;
       document.getElementById('drop-zone').style.display = 'none';
       document.getElementById('canvas-wrapper').style.display = 'block';
+
+      // Pass stored canvas dimensions so annotations load at correct coordinates
+      const forceDims = s.canvasWidth && s.canvasHeight
+        ? { width: s.canvasWidth, height: s.canvasHeight } : null;
+
       initCanvas(useDataURL, s.imageName || 'mapping', () => {
         histLock = true;
         cv.loadFromJSON(s.canvasJSON).then(() => {
@@ -5084,6 +5190,13 @@
             pushHist(); syncHistBtns(); setTool(tool);
             elevateSpecialObjects();
             updateOverlapClips();
+
+            // Auto-fit zoom so the restored canvas fits the current viewport
+            const area = document.getElementById('canvas-area');
+            const fitW = (area.clientWidth - 40) / baseW;
+            const fitH = (area.clientHeight - 40) / baseH;
+            const fitPct = Math.round(Math.min(fitW, fitH) * 100);
+            if (fitPct < 100) setZoom(fitPct);
           };
           const hasBg = cv.getObjects().some(o => o._bg);
           if (!hasBg) {
@@ -5098,67 +5211,12 @@
             finishLoad();
           }
         });
-      });
+      }, forceDims);
     }
 
     // ═══════════════════════════════════════════════════════
-    //  PNG CHUNK UTILITIES
+    //  COMPRESSION UTILITIES
     // ═══════════════════════════════════════════════════════
-
-    // CRC32 lookup table (used for PNG chunk checksums)
-    const _crc32Table = (() => {
-      const t = new Uint32Array(256);
-      for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-        t[n] = c;
-      }
-      return t;
-    })();
-
-    function crc32(buf) {
-      let crc = 0xFFFFFFFF;
-      for (let i = 0; i < buf.length; i++) crc = _crc32Table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
-      return (crc ^ 0xFFFFFFFF) >>> 0;
-    }
-
-    /** Build a complete PNG chunk: [4-byte length][4-byte type][data][4-byte CRC] */
-    function makePNGChunk(type, data) {
-      const typeBytes = new TextEncoder().encode(type);           // 4 bytes
-      const len = data.byteLength;
-      const buf = new Uint8Array(4 + 4 + len + 4);
-      const dv = new DataView(buf.buffer);
-      dv.setUint32(0, len);                                       // length
-      buf.set(typeBytes, 4);                                       // type
-      buf.set(data instanceof Uint8Array ? data : new Uint8Array(data), 8); // data
-      const crcInput = new Uint8Array(4 + len);
-      crcInput.set(typeBytes, 0);
-      crcInput.set(data instanceof Uint8Array ? data : new Uint8Array(data), 4);
-      dv.setUint32(8 + len, crc32(crcInput));                     // CRC
-      return buf;
-    }
-
-    /** Build tEXt chunk data: keyword\0value (Latin-1) */
-    function makeTEXtData(keyword, value) {
-      const kw = new TextEncoder().encode(keyword);
-      const val = new TextEncoder().encode(value);
-      const buf = new Uint8Array(kw.length + 1 + val.length);
-      buf.set(kw, 0);
-      // buf[kw.length] = 0; // null separator (already 0)
-      buf.set(val, kw.length + 1);
-      return buf;
-    }
-
-    /** Build zTXt chunk data: keyword\0compressionMethod\0compressedData */
-    function makeZTXtData(keyword, compressedBytes) {
-      const kw = new TextEncoder().encode(keyword);
-      const buf = new Uint8Array(kw.length + 1 + 1 + compressedBytes.length);
-      buf.set(kw, 0);
-      // buf[kw.length] = 0;     // null separator
-      buf[kw.length + 1] = 0;    // compression method 0 = deflate
-      buf.set(compressedBytes, kw.length + 2);
-      return buf;
-    }
 
     /** Compress text using browser CompressionStream (deflate) */
     async function deflateText(text) {
@@ -5201,81 +5259,6 @@
       return new TextDecoder().decode(out);
     }
 
-    /** Insert chunks into a PNG ArrayBuffer just before IEND */
-    function insertPNGChunks(pngBuf, chunks) {
-      const src = new Uint8Array(pngBuf);
-      // Find IEND: scan backwards for 'IEND' type (0x49454E44)
-      let iendPos = -1;
-      for (let i = src.length - 12; i >= 8; i--) {
-        if (src[i + 4] === 0x49 && src[i + 5] === 0x45 && src[i + 6] === 0x4E && src[i + 7] === 0x44) {
-          iendPos = i;
-          break;
-        }
-      }
-      if (iendPos < 0) throw new Error('PNG IEND not found');
-      const before = src.slice(0, iendPos);
-      const iend = src.slice(iendPos);
-      const totalExtra = chunks.reduce((s, c) => s + c.length, 0);
-      const out = new Uint8Array(before.length + totalExtra + iend.length);
-      out.set(before, 0);
-      let off = before.length;
-      for (const c of chunks) { out.set(c, off); off += c.length; }
-      out.set(iend, off);
-      return out.buffer;
-    }
-
-    /** Read PNG chunks, returning an array of { type, data } */
-    function readPNGChunks(pngBuf) {
-      const src = new Uint8Array(pngBuf);
-      const results = [];
-      let pos = 8; // skip PNG signature
-      while (pos < src.length) {
-        const dv = new DataView(src.buffer, src.byteOffset + pos, 8);
-        const len = dv.getUint32(0);
-        const type = String.fromCharCode(src[pos + 4], src[pos + 5], src[pos + 6], src[pos + 7]);
-        const data = src.slice(pos + 8, pos + 8 + len);
-        results.push({ type, data });
-        pos += 12 + len; // length(4) + type(4) + data(len) + crc(4)
-        if (type === 'IEND') break;
-      }
-      return results;
-    }
-
-    /** Check if an ArrayBuffer is a PNG with PathAnnotate metadata */
-    function hasPathAnnotateMeta(pngBuf) {
-      const src = new Uint8Array(pngBuf);
-      // Check PNG signature
-      if (src[0] !== 0x89 || src[1] !== 0x50 || src[2] !== 0x4E || src[3] !== 0x47) return false;
-      // Quick scan for 'tEXt' chunks with 'PathAnnotate' keyword
-      const chunks = readPNGChunks(pngBuf);
-      return chunks.some(c => {
-        if (c.type !== 'tEXt') return false;
-        const nullIdx = c.data.indexOf(0);
-        if (nullIdx < 0) return false;
-        const kw = new TextDecoder().decode(c.data.slice(0, nullIdx));
-        return kw === 'PathAnnotate';
-      });
-    }
-
-    /** Extract PathAnnotate metadata from a PNG ArrayBuffer. Returns parsed payload or null. */
-    async function extractPathAnnotateMeta(pngBuf) {
-      try {
-        const chunks = readPNGChunks(pngBuf);
-        for (const c of chunks) {
-          if (c.type !== 'zTXt') continue;
-          const nullIdx = c.data.indexOf(0);
-          if (nullIdx < 0) continue;
-          const kw = new TextDecoder().decode(c.data.slice(0, nullIdx));
-          if (kw !== 'PathAnnotateData') continue;
-          // byte after null is compression method (0 = deflate), then compressed data
-          const compressed = c.data.slice(nullIdx + 2);
-          const json = await inflateData(compressed);
-          return JSON.parse(json);
-        }
-      } catch (e) { console.warn('Failed to extract PathAnnotate metadata:', e); }
-      return null;
-    }
-
     /** Render the original image as a JPEG dataURL for embedding (preserves full resolution) */
     function renderOriginalAsJPEG(quality) {
       return new Promise((resolve) => {
@@ -5293,37 +5276,157 @@
       });
     }
 
-    /** Convert a dataURL to an ArrayBuffer */
-    function dataURLToArrayBuffer(dataURL) {
-      const binary = atob(dataURL.split(',')[1]);
-      const buf = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
-      return buf.buffer;
+    // ═══════════════════════════════════════════════════════
+    //  JPEG APP MARKER METADATA UTILITIES
+    // ═══════════════════════════════════════════════════════
+    /*
+      JPEG files use APP segments (FF E0–FF EF) for metadata.  We embed
+      PathAnnotate session data in APP2 (FF E2) segments.  Each segment
+      can hold up to 65,533 bytes of data.  For payloads larger than that
+      we split across multiple APP2 segments with a sequence header:
+
+        FF E2              — APP2 marker
+        XX XX              — segment length (2 bytes, big-endian, includes itself)
+        "PathAnnotate\0"   — 13-byte identifier
+        XX XX              — chunk index  (2 bytes, big-endian)
+        XX XX              — total chunks (2 bytes, big-endian)
+        [data...]          — payload fragment
+
+      On re-import we scan for these segments, reassemble the fragments
+      in order, decompress with inflateData(), and parse the JSON payload.
+    */
+
+    const JPEG_APP2_MARKER = 0xFFE2;
+    const JPEG_META_ID = 'PathAnnotate\0';                    // 13 bytes
+    const JPEG_META_ID_BYTES = new TextEncoder().encode(JPEG_META_ID);
+    const JPEG_SEG_OVERHEAD = 2 + JPEG_META_ID_BYTES.length + 4; // length(2) + id(13) + idx(2) + total(2)
+    const JPEG_MAX_SEG_DATA = 65533 - JPEG_META_ID_BYTES.length - 4; // ~65,516 bytes per chunk
+
+    /** Insert compressed metadata into a JPEG ArrayBuffer as APP2 segments. */
+    function insertJPEGAppSegments(jpegBuf, compressedPayload) {
+      const src = new Uint8Array(jpegBuf);
+      // Verify JPEG SOI marker
+      if (src[0] !== 0xFF || src[1] !== 0xD8) throw new Error('Not a valid JPEG');
+
+      // Chunk the payload
+      const totalChunks = Math.ceil(compressedPayload.length / JPEG_MAX_SEG_DATA);
+      const segments = [];
+      for (let i = 0; i < totalChunks; i++) {
+        const offset = i * JPEG_MAX_SEG_DATA;
+        const chunk = compressedPayload.slice(offset, offset + JPEG_MAX_SEG_DATA);
+        const segLen = 2 + JPEG_META_ID_BYTES.length + 4 + chunk.length; // length field includes itself
+        const seg = new Uint8Array(2 + segLen); // marker(2) + segLen bytes
+        seg[0] = 0xFF; seg[1] = 0xE2;          // APP2 marker
+        seg[2] = (segLen >> 8) & 0xFF;          // length high byte
+        seg[3] = segLen & 0xFF;                 // length low byte
+        seg.set(JPEG_META_ID_BYTES, 4);         // identifier
+        const hdrOff = 4 + JPEG_META_ID_BYTES.length;
+        seg[hdrOff]     = (i >> 8) & 0xFF;      // chunk index high
+        seg[hdrOff + 1] = i & 0xFF;             // chunk index low
+        seg[hdrOff + 2] = (totalChunks >> 8) & 0xFF; // total high
+        seg[hdrOff + 3] = totalChunks & 0xFF;   // total low
+        seg.set(chunk, hdrOff + 4);
+        segments.push(seg);
+      }
+
+      // Insert all APP2 segments right after SOI (FF D8), before existing markers
+      const totalInsert = segments.reduce((s, seg) => s + seg.length, 0);
+      const out = new Uint8Array(src.length + totalInsert);
+      out[0] = 0xFF; out[1] = 0xD8;            // SOI
+      let pos = 2;
+      for (const seg of segments) { out.set(seg, pos); pos += seg.length; }
+      out.set(src.subarray(2), pos);            // rest of original JPEG
+      return out.buffer;
+    }
+
+    /** Quick check: does this JPEG buffer contain PathAnnotate APP2 metadata? */
+    function hasPathAnnotateJPEGMeta(jpegBuf) {
+      const src = new Uint8Array(jpegBuf);
+      if (src.length < 4 || src[0] !== 0xFF || src[1] !== 0xD8) return false;
+      let pos = 2;
+      while (pos + 4 < src.length) {
+        if (src[pos] !== 0xFF) break;
+        const marker = src[pos + 1];
+        if (marker === 0xDA) break;             // SOS — no more metadata segments
+        const segLen = (src[pos + 2] << 8) | src[pos + 3];
+        if (marker === 0xE2 && segLen >= JPEG_META_ID_BYTES.length + 2) {
+          // Check identifier
+          let match = true;
+          for (let i = 0; i < JPEG_META_ID_BYTES.length; i++) {
+            if (src[pos + 4 + i] !== JPEG_META_ID_BYTES[i]) { match = false; break; }
+          }
+          if (match) return true;
+        }
+        pos += 2 + segLen;
+      }
+      return false;
+    }
+
+    /** Extract and reassemble PathAnnotate metadata from JPEG APP2 segments. */
+    async function extractPathAnnotateJPEGMeta(jpegBuf) {
+      try {
+        const src = new Uint8Array(jpegBuf);
+        if (src[0] !== 0xFF || src[1] !== 0xD8) return null;
+
+        const chunks = [];    // { index, data }
+        let totalExpected = 0;
+        let pos = 2;
+
+        while (pos + 4 < src.length) {
+          if (src[pos] !== 0xFF) break;
+          const marker = src[pos + 1];
+          if (marker === 0xDA) break;           // SOS
+          const segLen = (src[pos + 2] << 8) | src[pos + 3];
+
+          if (marker === 0xE2 && segLen >= JPEG_META_ID_BYTES.length + 2 + 4) {
+            let match = true;
+            for (let i = 0; i < JPEG_META_ID_BYTES.length; i++) {
+              if (src[pos + 4 + i] !== JPEG_META_ID_BYTES[i]) { match = false; break; }
+            }
+            if (match) {
+              const hdrOff = pos + 4 + JPEG_META_ID_BYTES.length;
+              const idx = (src[hdrOff] << 8) | src[hdrOff + 1];
+              const tot = (src[hdrOff + 2] << 8) | src[hdrOff + 3];
+              totalExpected = tot;
+              const dataStart = hdrOff + 4;
+              const dataEnd = pos + 2 + segLen;
+              chunks.push({ index: idx, data: src.slice(dataStart, dataEnd) });
+            }
+          }
+          pos += 2 + segLen;
+        }
+
+        if (chunks.length === 0 || chunks.length !== totalExpected) return null;
+
+        // Reassemble in order
+        chunks.sort((a, b) => a.index - b.index);
+        const totalLen = chunks.reduce((s, c) => s + c.data.length, 0);
+        const assembled = new Uint8Array(totalLen);
+        let off = 0;
+        for (const c of chunks) { assembled.set(c.data, off); off += c.data.length; }
+
+        const json = await inflateData(assembled);
+        return JSON.parse(json);
+      } catch (e) {
+        console.warn('Failed to extract PathAnnotate JPEG metadata:', e);
+        return null;
+      }
     }
 
     // ═══════════════════════════════════════════════════════
-    //  EXPORT — PNG with embedded metadata
+    //  EXPORT — JPEG with embedded metadata
     // ═══════════════════════════════════════════════════════
     /*
-      Exports the annotated canvas as a PNG. Two custom chunks are embedded
-      before IEND:
-        1. tEXt "PathAnnotate" = "1"  — lightweight marker for detection
-        2. zTXt "PathAnnotateData"    — deflate-compressed JSON payload with
-           the session data and the original image (JPEG-compressed, full
-           resolution), allowing PathAnnotate to restore an editable session.
+      Exports the annotated canvas as a JPEG with embedded session metadata.
 
-      Rendering strategy: Fabric.js v7's toCanvasElement forcibly disables
-      retina scaling on its offscreen canvas (line 1159 of StaticCanvas.mjs),
-      so text rendered there lacks the browser's DPR-aware font hinting and
-      subpixel anti-aliasing — making annotations look fuzzy compared to the
-      on-screen rendering.
+      Rendering strategy: scale the Fabric.js canvas to the full original
+      image resolution so annotations (text, lines, shapes) are rendered
+      natively at that size by the browser — giving crisp text with proper
+      font hinting.  The annotation layer is then composited over the
+      full-resolution original image and exported as JPEG.
 
-      Fix: composite approach —
-        1. Draw the full-resolution original image on an offscreen canvas
-        2. Capture ONLY the annotation layer from the on-screen canvas at
-           retina quality (the actual browser-rendered pixels)
-        3. Scale and draw the annotation layer on top of the full-res image
-      This gives full-resolution background with screen-quality annotations.
+      Session data (canvas JSON, original image as JPEG) is embedded in
+      custom APP2 segments so the file can be re-opened for further editing.
     */
     async function exportImg() {
       if (!cv) return;
@@ -5332,29 +5435,29 @@
       const img = new Image();
       img.onload = async () => {
         try {
-          // 1. Save current canvas state and ensure 100% zoom
+          // 1. Save current canvas state
           const savedZoom = cv.getZoom();
           const savedW = cv.getWidth();
           const savedH = cv.getHeight();
-          cv.setZoom(1);
-          cv.setDimensions({ width: baseW, height: baseH });
 
-          // 2. Hide background image, render annotations on transparent background
+          // 2. Scale canvas to full original image resolution for crisp annotations
+          const scaleFactor = img.width / baseW;
+          cv.setZoom(scaleFactor);
+          cv.setDimensions({ width: img.width, height: img.height });
+
+          // 3. Hide background image, render annotations on transparent background
           const bgObj = cv.getObjects().find(o => o._bg);
           if (bgObj) bgObj.set('opacity', 0);
           cv.renderAll();
 
-          // 3. Capture the on-screen annotation layer at retina quality
-          //    lowerCanvasEl is the actual browser-rendered HTMLCanvasElement,
-          //    which includes DPR-aware font hinting and subpixel anti-aliasing.
+          // 4. Capture the annotation layer at full output resolution
+          //    lowerCanvasEl now matches the original image dimensions,
+          //    so text is rendered natively at full resolution with proper
+          //    font hinting — no upscaling needed.
           const screenCanvas = cv.lowerCanvasEl;
-          const annotW = screenCanvas.width;   // retina-scaled
-          const annotH = screenCanvas.height;  // retina-scaled
-
-          // 4. Copy annotation pixels to a temporary canvas (screen render disappears on restore)
           const annotCanvas = document.createElement('canvas');
-          annotCanvas.width = annotW;
-          annotCanvas.height = annotH;
+          annotCanvas.width = screenCanvas.width;
+          annotCanvas.height = screenCanvas.height;
           annotCanvas.getContext('2d').drawImage(screenCanvas, 0, 0);
 
           // 5. Restore background and canvas state
@@ -5363,22 +5466,21 @@
           cv.setDimensions({ width: savedW, height: savedH });
           cv.renderAll();
 
-          // 6. Composite: full-res original + retina annotation layer
+          // 6. Composite: full-res original + full-res annotation layer
           const outCanvas = document.createElement('canvas');
           outCanvas.width = img.width;
           outCanvas.height = img.height;
           const ctx = outCanvas.getContext('2d');
-
-          // Draw full-resolution original image
           ctx.drawImage(img, 0, 0, img.width, img.height);
-
-          // Scale annotation layer to cover full image
           ctx.drawImage(annotCanvas, 0, 0, img.width, img.height);
 
-          const flatDataURL = outCanvas.toDataURL('image/png');
-          let pngBuf = dataURLToArrayBuffer(flatDataURL);
+          // 7. Export as JPEG (vastly smaller than PNG for photographic content)
+          const jpegBlob = await new Promise(resolve =>
+            outCanvas.toBlob(resolve, 'image/jpeg', 0.92)
+          );
+          let jpegBuf = await jpegBlob.arrayBuffer();
 
-          // 7. Build metadata payload — original image as JPEG to keep size down
+          // 8. Build metadata payload — original image as JPEG to keep size down
           const originalImage = await renderOriginalAsJPEG(0.85);
           const title = getTitleText();
           const session = {
@@ -5392,17 +5494,15 @@
           const payload = { v: 1, session, originalImage };
           const payloadJSON = JSON.stringify(payload);
 
-          // 8. Compress and build chunks
+          // 9. Compress and embed as JPEG APP2 segments
           const compressed = await deflateText(payloadJSON);
-          const markerChunk = makePNGChunk('tEXt', makeTEXtData('PathAnnotate', '1'));
-          const dataChunk = makePNGChunk('zTXt', makeZTXtData('PathAnnotateData', compressed));
+          jpegBuf = insertJPEGAppSegments(jpegBuf, compressed);
 
-          // 9. Insert chunks and download
-          pngBuf = insertPNGChunks(pngBuf, [markerChunk, dataChunk]);
-          const blob = new Blob([pngBuf], { type: 'image/png' });
+          // 10. Download
+          const blob = new Blob([jpegBuf], { type: 'image/jpeg' });
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
-          a.download = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.png';
+          a.download = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.jpg';
           a.click();
           URL.revokeObjectURL(a.href);
         } catch (e) {
@@ -5447,7 +5547,7 @@
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !inInput && !iTextEditing) { e.preventDefault(); pasteFromClipboard(); return; }
 
       if (inInput) return;
-      if (e.key === 'Escape') { closeEdit(); closeLegend(); closeIntro(); document.getElementById('privacy-modal').classList.remove('open'); document.getElementById('changelog-modal').classList.remove('open'); if (cv) { cv.discardActiveObject(); cv.renderAll(); } selectedIds.clear(); refreshList(); return; }
+      if (e.key === 'Escape') { closeEdit(); closeLegend(); closeIntro(); document.getElementById('privacy-modal').classList.remove('open'); document.getElementById('changelog-modal').classList.remove('open'); document.getElementById('info-modal').classList.remove('open'); if (cv) { cv.discardActiveObject(); cv.renderAll(); } selectedIds.clear(); refreshList(); return; }
       if (e.key.toLowerCase() === 'r') setTool('rect');
       if (e.key.toLowerCase() === 'e') setTool('line');
       if (e.key.toLowerCase() === 'b') setTool('block');
