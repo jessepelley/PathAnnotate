@@ -216,7 +216,7 @@
 
     /* SIDEBAR */
     .sidebar {
-      width: 222px;
+      width: 205px;
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
@@ -317,13 +317,18 @@
     .undo-redo-row {
       display: flex;
       gap: 6px;
-      margin-bottom: 2px
+      margin-bottom: 2px;
+    }
+
+    .undo-redo-row button {
+      text-align: center;
     }
 
     .btn-half {
       flex: 1;
       width: auto;
       justify-content: center;
+      text-align: center;
       font-size: 11px
     }
 
@@ -337,6 +342,43 @@
       border-radius: 3px;
       padding: 1px 4px
     }
+
+        /* two tools per row */
+    .tool-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+  /* button layout */
+  .btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;   /* left align icon + text */
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .btn-half{
+    justify-content: center; 
+  }
+
+  /* icon size */
+  .btn svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  /* push shortcut to the far right */
+  .kbdtag {
+    margin-left: auto;   /* KEY PART */
+    font-size: 10px;
+    padding: 1px 4px;
+  }
 
     .divider {
       height: 1px;
@@ -618,6 +660,22 @@
       color: var(--muted);
       white-space: nowrap
     }
+    /* container row like undo/redo */
+    .canvas-btn-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+
+    /* match undo/redo button style */
+    .canvas-btn-row .btn {
+      flex: 1;           /* same width for all buttons */
+      padding: 4px 6px;  /* optional: adjust to match undo/redo compactness */
+      display: flex;
+      align-items: center;
+      justify-content: center; /* text + icon centered */
+      gap: 4px;
+    }
 
     /* COMBINED BOTTOM BAR (replaces zoom-bar + statusbar) */
     .bottom-bar {
@@ -746,7 +804,7 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      max-height: 100px
+      max-height: 150px
     }
 
     .annot-list::-webkit-scrollbar {
@@ -828,7 +886,7 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      max-height: 160px;
+      max-height: 500px;
       margin-top: 3px
     }
 
@@ -1010,20 +1068,14 @@
       gap: 4px
     }
 
-    /* CUSTOM COLOR SWATCH — displays the last picked color */
-    .swatch-custom {
-      border: 1.5px dashed var(--border);
-    }
-
-    .swatch-custom:hover {
-      border-color: var(--accent)
-    }
-
-    /* RAINBOW SWATCH — opens the native color picker */
-    .swatch-rainbow {
-      background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
-      position: relative;
+    /* Rainbow swatch — circular, no hover/transform */
+    .swatch.swatch-rainbow {
+      border-radius: 50%; /* circle */
+      background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+      border: 1px solid #ccc; /* optional for visibility */
       overflow: hidden;
+      transition: none;      /* disables all transitions including transform */
+      transform: none !important;  /* ensures no inherited transforms apply */
     }
 
     /* LEGEND MODAL */
@@ -1266,7 +1318,7 @@
       height: 22px;
       border-radius: 50%;
       background: var(--accent);
-      color: #000;
+      color: #ffffff;
       font-size: 11px;
       font-weight: 600;
       display: flex;
@@ -1373,7 +1425,7 @@
     .intro-btn.primary {
       background: var(--accent);
       border-color: var(--accent);
-      color: #000;
+      color: #ffffff;
       font-weight: 500
     }
     .intro-btn.primary:hover { filter: brightness(1.1) }
@@ -1409,8 +1461,7 @@
       text-align: right
     }
 
-    #file-input,
-    #json-input {
+    #file-input {
       display: none
     }
   </style>
@@ -1431,7 +1482,7 @@
   </noscript>
 
   <header>
-    <div class="logo">Path<span>Annotate</span><span class="logo-ver" id="logo-ver"></span></div>
+    <div id="logo-version-header" style="cursor: pointer;" onclick="document.getElementById('changelog-modal').classList.add('open')"><div class="logo">Path<span>Annotate</span><span class="logo-ver" id="logo-ver"></span></div></div>
     <div class="hdr-r">
       <button class="pill" onclick="document.getElementById('file-input').click()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1441,28 +1492,30 @@
         </svg>
         Import Photo
       </button>
-      <button class="pill" onclick="exportImg()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
+      <button class="pill" onclick="openTitle()" title="Set case number and specimen name">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 7 4 4 20 4 20 7" />
+          <line x1="9" y1="20" x2="15" y2="20" />
+          <line x1="12" y1="4" x2="12" y2="20" />
           </svg>
-        Export Photo
+        Set Title
       </button>
-      <div class="hdr-sep"></div>
-      <button class="pill" onclick="saveSession()">
+      <button class="pill" onclick="openLegend()" title="Insert an orientation legend onto the canvas">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <!-- vertical needle with arrowhead -->
+          <line x1="12" y1="20" x2="12" y2="4" /> <!-- main vertical line -->
+          <polyline points="12 4 10 6 14 6 12 4" /> <!-- arrowhead at top -->
+          <!-- horizontal cross line -->
+          <line x1="6" y1="13" x2="18" y2="13" /> <!-- horizontal line -->  </svg>
+        Set Legend
+      </button>
+      <button class="pill" onclick="exportImg()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
           <polyline points="17 21 17 13 7 13 7 21" />
           <polyline points="7 3 7 8 15 8" />
         </svg>
-        Save
-      </button>
-      <button class="pill" onclick="document.getElementById('json-input').click()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5" />
-        </svg>
-        Load
+        Export Photo
       </button>
       <div class="hdr-sep"></div>
 
@@ -1486,6 +1539,7 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
         </svg>Light
       </button>
+      <button class="pill" onclick="openIntro()" title="Help / Introduction">?</button>
     </div>
   </header>
 
@@ -1508,82 +1562,64 @@
           Redo
         </button>
       </div>
+<!-- ── DRAWING TOOLS ───────────────────────────── -->
 
-      <!-- ── CANVAS FURNITURE ────────────────────────── -->
-      <div class="slabel" title="Case number and specimen name shown on the canvas and used as export filename">Specimen Title</div>
-      <button class="btn" onclick="openTitle()" title="Set case number and specimen name">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 7 4 4 20 4 20 7"/>
-          <line x1="9" y1="20" x2="15" y2="20"/>
-          <line x1="12" y1="4" x2="12" y2="20"/>
-        </svg>
-        Set Title…
-      </button>
+<div class="slabel">Tool</div>
 
-      <div class="slabel" title="Add a cardinal direction overlay (Superior/Inferior/Anterior/Posterior etc.)">Orientation Legend</div>
-      <button class="btn" onclick="openLegend()" title="Insert an orientation legend onto the canvas">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-        Insert Legend…
-      </button>
+<!-- Select tool (full width row) -->
+<button class="btn" id="tool-select" onclick="setTool('select')" title="Select, move, resize and rotate objects (S)">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M5 3l14 9-7 1-4 7z" />
+  </svg>
+  Select / Move<span class="kbdtag">S</span>
+</button>
 
-      <!-- ── DRAWING TOOLS ───────────────────────────── -->
-      <div class="slabel">Tool</div>
-      <button class="btn" id="tool-select" onclick="setTool('select')" title="Select, move, resize and rotate objects (S)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 3l14 9-7 1-4 7z" />
-        </svg>
-        Select / Move<span class="kbdtag">S</span>
-      </button>
+<!-- 2-column grid for remaining tools -->
+<div class="tool-grid">
 
-      <button class="btn active" id="tool-rect" onclick="setTool('rect')"
-        title="Draw annotation rectangles representing tissue sections (R)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-        </svg>
-        Rectangle<span class="kbdtag">R</span>
-      </button>
-      <button class="btn" id="tool-block" onclick="setTool('block')"
-        title="Place a block label using the current block counter value (B)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 7 4 4 20 4 20 7" />
-          <line x1="9" y1="20" x2="15" y2="20" />
-          <line x1="12" y1="4" x2="12" y2="20" />
-        </svg>
-        Block<span class="kbdtag">B</span>
-      </button>
-      
-      <button class="btn" id="tool-line" onclick="setTool('line')"
-        title="Draw lines and arrows for orientation or margin markings (E)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="5" y1="19" x2="19" y2="5" />
-        </svg>
-        Line<span class="kbdtag">E</span>
-      </button>
+  <button class="btn active" id="tool-rect" onclick="setTool('rect')"
+    title="Draw annotation rectangles representing tissue sections (R)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+    </svg>
+    Rect<span class="kbdtag">R</span>
+  </button>
 
-      <button class="btn" id="tool-text" onclick="setTool('text')"
-        title="Add freeform text annotations (not tracked as blocks) (T)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="4" y1="6" x2="20" y2="6"/>
-          <line x1="4" y1="12" x2="14" y2="12"/>
-          <line x1="4" y1="18" x2="11" y2="18"/>
-        </svg>
-        Text<span class="kbdtag">T</span>
-      </button>
+  <button class="btn" id="tool-block" onclick="setTool('block')"
+    title="Place a block label using the current block counter value (B)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="4 7 4 4 20 4 20 7" />
+      <line x1="9" y1="20" x2="15" y2="20" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+    </svg>
+    Block<span class="kbdtag">B</span>
+  </button>
 
+  <button class="btn" id="tool-line" onclick="setTool('line')"
+    title="Draw lines and arrows for orientation or margin markings (E)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="5" y1="19" x2="19" y2="5" />
+    </svg>
+    Line<span class="kbdtag">E</span>
+  </button>
+
+  <button class="btn" id="tool-text" onclick="setTool('text')"
+    title="Add freeform text annotations (not tracked as blocks) (T)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="12" x2="14" y2="12" />
+      <line x1="4" y1="18" x2="11" y2="18" />
+    </svg>
+    Text<span class="kbdtag">T</span>
+  </button>
+
+</div>
 
       <div class="slabel" title="Stroke and fill colour for new objects">Stroke Color</div>
       <div class="color-row" id="color-row"></div>
       <!-- hidden input keeps getLbl/setLbl working without a visible toolbar widget -->
       <input type="text" id="block-label" value="1" style="display:none" aria-hidden="true">
 
-
-
-      
-      
       <!-- ── STYLE CONTROLS ──────────────────────────── -->
       <div class="sidebar-section" id="section-linestyle">
         <div class="slabel" title="Stroke dash pattern for rectangles and lines">Line Style</div>
@@ -1649,7 +1685,7 @@
           <polyline points="21 15 16 10 5 21" />
         </svg>
         <h2>No image loaded</h2>
-        <p>Import a gross specimen photo to begin</p>
+        <p>Import a photo to begin</p>
         <button class="upload-btn-large" onclick="document.getElementById('file-input').click()">Choose Image</button>
         <p style="font-size:11px;margin-top:4px;">or drag and drop here</p>
       </div>
@@ -1672,11 +1708,8 @@
     <button class="zoom-fit-btn" onclick="resetZoom()" title="Fit canvas to window">Reset</button>
     <div class="bar-sep"></div>
 
-    <button class="privacy-link" id="ver-stat" onclick="document.getElementById('changelog-modal').classList.add('open')"
-      title="View changelog">PATHANNOTATE</button>
       <button class="privacy-link" onclick="document.getElementById('privacy-modal').classList.add('open')"
         title="Privacy policy">Privacy Policy</button>
-      <button class="privacy-link" onclick="openIntro()" title="Help / Introduction">?</button>
   </div>
 
   <!-- Inline label editor -->
@@ -1721,8 +1754,8 @@
       </div>
 
       <div class="mrow">
-        <div class="mf"><label>Superior</label><input id="leg-s" value="Superior" oninput="refreshPreview()"></div>
-        <div class="mf"><label>Inferior</label><input id="leg-i" value="Inferior" oninput="refreshPreview()"></div>
+        <div class="mf"><label>Top</label><input id="leg-s" value="Superior" oninput="refreshPreview()"></div>
+        <div class="mf"><label>Bottom</label><input id="leg-i" value="Inferior" oninput="refreshPreview()"></div>
       </div>
       <div class="mrow">
         <div class="mf"><label>Left</label><input id="leg-l" value="Anterior" oninput="refreshPreview()"></div>
@@ -1804,41 +1837,38 @@
            style="color:var(--accent);text-decoration:none">github.com/PathAnnotate/PathAnnotate</a>
       </p>
       <div style="font-family:'DM Mono',monospace;font-size:11px;line-height:1.7">
-        <div style="color:var(--accent);margin-bottom:4px">v2.0.0</div>
+        <div style="color:var(--accent);margin-bottom:4px">v2.0</div>
         <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
-          <li>Custom colour picker (+ swatch) in colour row</li>
-          <li>Anchor / Freeform toggle moved into double-click edit popup</li>
-          <li>Block labels open popup editor (consistent with labelled rectangles)</li>
-          <li>Block counter advances to max+1; intentional skips no longer interrupted</li>
-          <li>Overlap clipping: front rectangle always shows full border over back rectangle</li>
-          <li>Z-order persists after deselection via lastElevatedRect clip logic</li>
-          <li>Adjacent rectangles created with + share a single perfect edge (cassette model)</li>
-          <li>Block labels snap to line endpoints with magnetic pull zone</li>
-          <li>Line drawing snaps tip to nearby existing line endpoints</li>
-          <li>Undo/redo: background no longer becomes selectable after undo; anchor state preserved</li>
+          <li>Annotation data now embedded in the exported image</li>
+          <li>Custom colour picker</li>
+          <li>Rectangles now overlap — the last one selected appears on top</li>
+          <li>Lines can snap to other lines when drawing</li>
+          <li>Arrows can be added by double-clicking a line</li>
         </ul>
-        <div style="color:var(--accent);margin-bottom:4px">v1.3.0</div>
+        <div style="color:var(--accent);margin-bottom:4px">v1.3</div>
         <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
-          <li>Upgraded to Fabric.js v7 (async API, renamed classes, origin defaults)</li>
+          <li>Add block labels to rectangles with block tool or by right-clicking on the rectangle</li>
+          <li>Edit block label with double-click</li>
+          <li>Zoom and pan view</li>
         </ul>
-        <div style="color:var(--accent);margin-bottom:4px">v1.2.0</div>
+        <div style="color:var(--accent);margin-bottom:4px">v1.2</div>
         <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
           <li>Added ⚠ warning to 'Block Key' for detected missing or duplicate blocks</li>
         </ul>
-        <div style="color:var(--accent);margin-bottom:4px">v1.1.0</div>
+        <div style="color:var(--accent);margin-bottom:4px">v1.1</div>
         <ul style="margin:0 0 12px 16px;padding:0;color:var(--text)">
-          <li>Block text inferred based on specimen title: numeric specimen → A, B, C…; alpha → 1, 2, 3…</li>
+          <li>Block format inferred based on specimen title: numeric specimen → A, B, C…; alpha → 1, 2, 3…</li>
           <li>ANNOTATIONS list and BLOCK KEY scroll to the latest added item</li>
           <li>Added Privacy Policy</li>
           <li>README and external library attribution</li>
         </ul>
-        <div style="color:var(--accent);margin-bottom:4px">v1.0.0</div>
+        <div style="color:var(--accent);margin-bottom:4px">v1.0</div>
         <ul style="margin:0 0 0 16px;padding:0;color:var(--text)">
           <li>Initial release: gross pathology image annotation with Fabric.js canvas</li>
           <li>Rectangle, line, and block tools</li>
           <li>Title with case number and specimen</li>
           <li>Block key panel with per-block notes and clipboard copy</li>
-          <li>Save/load JSON sessions and export annotated images</li>
+          <li>Save annotated images as PNG and export annotation data</li>
           <li>Undo/redo, light/dark theme, drag-and-drop image import</li>
         </ul>
       </div>
@@ -1884,28 +1914,28 @@
               <div class="intro-step-num">2</div>
               <div class="intro-step-body">
                 <strong>Set the specimen title</strong>
-                <span>Click <em>Set Title</em> to enter a case number and specimen (e.g. <em>2 Left Kidney</em>). The block counter auto-configures — numeric specimens use A, B, C… and alpha specimens use 1, 2, 3…</span>
+                <span>Click <em>Set Title</em> to enter a case number and specimen (e.g. <em>2 Left Kidney</em>). This should be done before mapping sections since this sets the block format, e.g. "1A" or "A1". This also sets the file name when exported.</span>
               </div>
             </div>
             <div class="intro-step">
               <div class="intro-step-num">3</div>
               <div class="intro-step-body">
-                <strong>Draw rectangles over tissue blocks</strong>
-                <span>Use the <em>Rectangle</em> tool (R) to outline each submitted block. Click the letter button (⊞) on a rectangle to assign the next sequential block label.</span>
+                <strong>Draw rectangles to map your sections</strong>
+                <span>Use the <em>Rect</em> tool (R) to outline sections. Click the floating letter/number button by the rectangle to add the next sequential block label. Double-click to edit and add a range. You can also right-click to quickly do both of these actions.</span>
               </div>
             </div>
             <div class="intro-step">
               <div class="intro-step-num">4</div>
               <div class="intro-step-body">
                 <strong>Build the block key</strong>
-                <span>Add notes for each block in the Block Key panel on the right. Click <em>Copy</em> to copy the formatted key to your clipboard for quick import into a dictation.</span>
+                <span>Add notes for each block in the Block Key panel on the left. Click the <em>Copy</em> button to paste this into your gross dictation.</span>
               </div>
             </div>
             <div class="intro-step">
               <div class="intro-step-num">5</div>
               <div class="intro-step-body">
-                <strong>Export or save</strong>
-                <span>Click <em>Export Photo</em> to save the annotated image, or <em>Save</em> to save a session file you can reload later.</span>
+                <strong>Export</strong>
+                <span>Click <em>Export Photo</em> to export a .PNG photo file with your annotations. Re-open it later in PathAnnotate to continue editing.</span>
               </div>
             </div>
           </div>
@@ -1916,7 +1946,7 @@
           <h2>Tools &amp; Shortcuts</h2>
           <table class="intro-kbd-table">
             <tr><td><span class="intro-kbd">R</span> Rectangle</td><td>Draw a block outline</td></tr>
-            <tr><td><span class="intro-kbd">E</span> Line</td><td>Draw a margin or incision line</td></tr>
+            <tr><td><span class="intro-kbd">E</span> Line</td><td>Draw a line, double-click the end for an arrow</td></tr>
             <tr><td><span class="intro-kbd">B</span> Block label</td><td>Place a floating block letter</td></tr>
             <tr><td><span class="intro-kbd">T</span> Text</td><td>Place free text anywhere</td></tr>
             <tr><td><span class="intro-kbd">S</span> Select</td><td>Move, resize, or delete objects</td></tr>
@@ -1926,9 +1956,9 @@
             <tr><td><span class="intro-kbd">Right-click</span></td><td>Paste last annotation at cursor</td></tr>
           </table>
           <div class="intro-tips">
-            <div class="intro-tip">Use the <strong>+</strong> arrows on a selected rectangle to create an adjacent block that shares a perfect edge — ideal for representing sequential tissue sections.</div>
-            <div class="intro-tip">Block labels snap to nearby rectangle hotpoints and line endpoints in <strong>Anchor</strong> mode. Switch to <strong>Freeform</strong> to drag them anywhere.</div>
-            <div class="intro-tip">When drawing a new line, the endpoint snaps to existing line endpoints — making it easy to chain connected lines.</div>
+            <div class="intro-tip">Use the <strong>+</strong> boxes on a selected rectangle or line to duplicate it in the direction of the <strong>+</strong>.</div>
+            <div class="intro-tip">Block labels snap to nearby rectangle hotpoints and line endpoints in <strong>Anchor</strong> mode. Double-Click to toggle <strong>Freeform</strong> to drag them freely.</div>
+            <div class="intro-tip">When drawing a new line, the endpoint snaps to existing line endpoints.</div>
           </div>
         </div>
 
@@ -1949,16 +1979,14 @@
   </div>
 
   <input type="file" id="file-input" accept="image/*">
-  <input type="file" id="json-input" accept=".json">
 
   <script>
     'use strict';
     // ═══════════════════════════════════════════════════════
     //  VERSION
     // ═══════════════════════════════════════════════════════
-    const VERSION = '2.0.0';
+    const VERSION = '2.0';
     document.getElementById('logo-ver').textContent = 'v' + VERSION;
-    document.getElementById('ver-stat').textContent = 'PathAnnotate v' + VERSION;
 
     // ═══════════════════════════════════════════════════════
     //  INTRO MODAL
@@ -2023,7 +2051,7 @@
     const LEGEND_PRESETS = [
       { label: 'Standard', sub: 'Sup/Inf + Ant/Post', s: 'Superior', i: 'Inferior', l: 'Anterior', r: 'Posterior' },
       { label: 'Lateral', sub: 'Sup/Inf + Med/Lat', s: 'Superior', i: 'Inferior', l: 'Medial', r: 'Lateral' },
-      { label: 'Axial', sub: 'Ant/Post + R/L', s: 'Anterior', i: 'Posterior', l: 'Right', r: 'Left' },
+      { label: 'Axial', sub: 'Ant/Post + L/R', s: 'Anterior', i: 'Posterior', l: 'Left', r: 'Right' },
       { label: 'Coronal', sub: 'Sup/Inf + R/L', s: 'Superior', i: 'Inferior', l: 'Right', r: 'Left' },
       { label: 'Proximal', sub: 'Prox/Dist + Med/Lat', s: 'Proximal', i: 'Distal', l: 'Medial', r: 'Lateral' },
       { label: 'Radial', sub: 'Rad/Uln + Dors/Volar', s: 'Radial', i: 'Ulnar', l: 'Dorsal', r: 'Volar' },
@@ -2043,7 +2071,7 @@
     let tool = 'rect';
     let color = '#ffffff';   // default white; overridden by saved settings
     let strokeW = 2;
-    let fontSize = 13;
+    let fontSize = 20;
     let anchor = 'tl';
     let anchorMode = 'anchor';   // 'anchor' | 'freeform'
     let lineStyle = 'solid';
@@ -2530,7 +2558,6 @@
     //  IMAGE LOADING
     // ═══════════════════════════════════════════════════════
     document.getElementById('file-input').addEventListener('change', e => { if (e.target.files[0]) readImg(e.target.files[0]); });
-    document.getElementById('json-input').addEventListener('change', e => { if (e.target.files[0]) readSession(e.target.files[0]); });
 
     const dropArea = document.getElementById('canvas-area');
     dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.style.outline = '2px dashed var(--accent)'; });
@@ -2538,15 +2565,38 @@
     dropArea.addEventListener('drop', e => {
       e.preventDefault(); dropArea.style.outline = '';
       const file = e.dataTransfer.files[0]; if (!file) return;
-      if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') readSession(file);
-      else readImg(file);
+      readImg(file);
     });
 
     function readImg(file) {
-      const r = new FileReader();
-      r.onload = ev => {
-        const dataURL = ev.target.result;
-        // If annotations already exist, preserve them — just swap the background
+      // First, read as ArrayBuffer to check for PathAnnotate PNG metadata
+      const abReader = new FileReader();
+      abReader.onload = async (ev) => {
+        const buf = ev.target.result;
+        const src = new Uint8Array(buf);
+        const isPNG = src.length > 8 && src[0] === 0x89 && src[1] === 0x50 && src[2] === 0x4E && src[3] === 0x47;
+
+        if (isPNG && hasPathAnnotateMeta(buf)) {
+          // Extract metadata and restore editable session
+          const payload = await extractPathAnnotateMeta(buf);
+          if (payload && payload.session) {
+            if (payload.originalImage) {
+              imgDataURL = payload.originalImage;
+              savePhotoToIDB(imgDataURL);
+            }
+            applySessionObject(payload.session);
+            return;
+          }
+        }
+
+        // No metadata — treat as a normal image
+        const blob = new Blob([buf], { type: file.type || 'image/png' });
+        const dataURL = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onload = e => resolve(e.target.result);
+          r.readAsDataURL(blob);
+        });
+
         if (cv && annots.length > 0) {
           replaceBackground(dataURL, file.name);
         } else {
@@ -2555,7 +2605,7 @@
           initCanvas(dataURL, file.name);
         }
       };
-      r.readAsDataURL(file);
+      abReader.readAsArrayBuffer(file);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -2906,7 +2956,7 @@
         } else {
           activeObj = new fabric.Line([ox, oy, ox, oy], {
             stroke: color, strokeWidth: strokeW,
-            strokeLineCap: 'round', strokeDashArray: dp,
+            strokeLineCap: 'square', strokeDashArray: dp,
             padding: 20, selectable: false, evented: false,
             _kind: 'line', _annId: ++annId,
           });
@@ -3161,15 +3211,6 @@
           }
         }
 
-        //attempting fix here for lbl --jesse UPDATE issue was elsewhere... work around was selecting the rect object after its creation, now it's automatically 'selected'
-        // if (obj && obj._kind === 'block' && anchorMode === 'anchor') {
-        //   const a = annots.find(a => a.shape === obj);
-        //   if (a && a.shape) {
-        //     snapBlockToRect(a);       // snap to nearest rect
-        //     glueLbl(a.shape);          // glue its label if attached
-        //   }
-        // }
-
         // When a block label is dropped in anchor mode, snap it to the nearest
         // hotpoint of any rect it is inside.
         if (obj && obj._kind === 'block' && anchorMode === 'anchor') {
@@ -3310,7 +3351,7 @@
     function renderCopyBtn(ctx, left, top, styleOverride, fabricObject) {
       // Match the visual style of Fabric.js's native resize/rotate controls so
       // the copy buttons blend seamlessly with the selection bounding box.
-      const size = (fabricObject && fabricObject.cornerSize) || 13;
+      const size = (fabricObject && fabricObject.cornerSize) || 10;
       const half = size / 2;
       ctx.save();
       ctx.fillStyle   = (fabricObject && fabricObject.cornerColor) || 'rgba(255,255,255,0.92)';
@@ -3327,7 +3368,7 @@
     }
 
     function renderEndpointHandle(ctx, left, top, styleOverride, fabricObject) {
-      const size = 14;
+      const size = 10;
       const half = size / 2;
       ctx.save();
       ctx.fillStyle   = (fabricObject && fabricObject.cornerColor) || '#ffffff';
@@ -3348,7 +3389,7 @@
       ctx.translate(left, top);
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fillStyle = ctx._letterActive ? '#4caf50' : '#607d8b';
+      ctx.fillStyle = ctx._letterActive ? '#00e5c3' : '#607d8b';
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 9px DM Mono, monospace';
@@ -3400,7 +3441,7 @@
       // Theme must be applied per-instance (Fabric v7 class fields own-property issue).
       applyCtrlTheme(obj);
       const off = 22;
-      const cs = 20;
+      const cs = 10;
       const makeHandler = dir => (evtData, transform) => { duplicateAnnotation(transform.target, dir); return true; };
       const ctrl = (x, y, ox, oy, dir) => new fabric.Control({
         x, y, offsetX: ox, offsetY: oy,
@@ -3424,6 +3465,17 @@
               // so we must go local → canvas → screen explicitly.
               const lp = target.calcLinePoints();
               const localPt = isFirst ? { x: lp.x1, y: lp.y1 } : { x: lp.x2, y: lp.y2 };
+              // ---- ADD THIS BLOCK ----
+              const dx = lp.x2 - lp.x1;
+              const dy = lp.y2 - lp.y1;
+              const len = Math.sqrt(dx * dx + dy * dy) || 1;
+
+              const pad = 11;           // distance of handle from line tip (pixels)
+              const dir = isFirst ? -1 : 1;
+
+              localPt.x += (dx / len) * pad * dir;
+              localPt.y += (dy / len) * pad * dir;
+              // ---- END BLOCK ----
               const oMtx = target.calcTransformMatrix();
               const cvPt = fabric.util.transformPoint(localPt, oMtx);
               const vpt  = (target.canvas && target.canvas.viewportTransform) || [1,0,0,1,0,0];
@@ -3471,7 +3523,7 @@
             render: renderEndpointHandle,
             actionName: 'modifyLine',
             cursorStyle: 'crosshair',
-            cornerSize: 14,
+            cornerSize: 10,
           });
         };
 
@@ -3490,7 +3542,7 @@
           x: -0.5, y: -0.5,
           offsetX: -off, offsetY: -off,
           cursorStyle: 'pointer',
-          cornerSize: 22,
+          cornerSize: 10,
           render: makeLetterRender(obj),
           mouseUpHandler(evtData, transform) {
             const ann = annots.find(a => a.shape === transform.target);
@@ -4976,31 +5028,6 @@
       cv.renderAll(); pushHist(); refreshLabelKey();
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  SAVE / LOAD SESSION
-    // ═══════════════════════════════════════════════════════
-    function saveSession() {
-      if (!cv) { alert('Nothing to save.'); return; }
-      cv.discardActiveObject(); cv.renderAll();
-      const title = getTitleText();
-      const session = {
-        v: 5, imageName: document.getElementById('file-name').textContent,
-        // imageDataURL intentionally omitted — export image separately with Export Photo.
-        // Background image src is also stripped from canvasJSON to keep file size small.
-        // On load the bg is recreated from the current image or a placeholder.
-        canvasJSON: getCanvasJSON(),
-        canvasWidth: cv.width, canvasHeight: cv.height,
-        meta: snapMeta(),
-        lbl: getLbl(), annId,
-        titleText: title || null,
-        caseNumber: caseNum, specimen: specimenText,
-      };
-      const fname = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'pathannotate-session') + '.json';
-      const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = fname; a.click();
-    }
-
     function makePlaceholderDataURL(w, h) {
       const c = document.createElement('canvas');
       c.width = w || 800; c.height = h || 600;
@@ -5074,37 +5101,314 @@
       });
     }
 
-    function readSession(file) {
-      const r = new FileReader();
-      r.onload = ev => {
-        let s; try { s = JSON.parse(ev.target.result); } catch { alert('Invalid session file.'); return; }
-        applySessionObject(s);
-      };
-      r.readAsText(file);
+    // ═══════════════════════════════════════════════════════
+    //  PNG CHUNK UTILITIES
+    // ═══════════════════════════════════════════════════════
+
+    // CRC32 lookup table (used for PNG chunk checksums)
+    const _crc32Table = (() => {
+      const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c;
+      }
+      return t;
+    })();
+
+    function crc32(buf) {
+      let crc = 0xFFFFFFFF;
+      for (let i = 0; i < buf.length; i++) crc = _crc32Table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+      return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    /** Build a complete PNG chunk: [4-byte length][4-byte type][data][4-byte CRC] */
+    function makePNGChunk(type, data) {
+      const typeBytes = new TextEncoder().encode(type);           // 4 bytes
+      const len = data.byteLength;
+      const buf = new Uint8Array(4 + 4 + len + 4);
+      const dv = new DataView(buf.buffer);
+      dv.setUint32(0, len);                                       // length
+      buf.set(typeBytes, 4);                                       // type
+      buf.set(data instanceof Uint8Array ? data : new Uint8Array(data), 8); // data
+      const crcInput = new Uint8Array(4 + len);
+      crcInput.set(typeBytes, 0);
+      crcInput.set(data instanceof Uint8Array ? data : new Uint8Array(data), 4);
+      dv.setUint32(8 + len, crc32(crcInput));                     // CRC
+      return buf;
+    }
+
+    /** Build tEXt chunk data: keyword\0value (Latin-1) */
+    function makeTEXtData(keyword, value) {
+      const kw = new TextEncoder().encode(keyword);
+      const val = new TextEncoder().encode(value);
+      const buf = new Uint8Array(kw.length + 1 + val.length);
+      buf.set(kw, 0);
+      // buf[kw.length] = 0; // null separator (already 0)
+      buf.set(val, kw.length + 1);
+      return buf;
+    }
+
+    /** Build zTXt chunk data: keyword\0compressionMethod\0compressedData */
+    function makeZTXtData(keyword, compressedBytes) {
+      const kw = new TextEncoder().encode(keyword);
+      const buf = new Uint8Array(kw.length + 1 + 1 + compressedBytes.length);
+      buf.set(kw, 0);
+      // buf[kw.length] = 0;     // null separator
+      buf[kw.length + 1] = 0;    // compression method 0 = deflate
+      buf.set(compressedBytes, kw.length + 2);
+      return buf;
+    }
+
+    /** Compress text using browser CompressionStream (deflate) */
+    async function deflateText(text) {
+      const input = new TextEncoder().encode(text);
+      const cs = new CompressionStream('deflate');
+      const writer = cs.writable.getWriter();
+      writer.write(input);
+      writer.close();
+      const chunks = [];
+      const reader = cs.readable.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const total = chunks.reduce((s, c) => s + c.length, 0);
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return out;
+    }
+
+    /** Decompress data using browser DecompressionStream (deflate) */
+    async function inflateData(compressedBytes) {
+      const ds = new DecompressionStream('deflate');
+      const writer = ds.writable.getWriter();
+      writer.write(compressedBytes);
+      writer.close();
+      const chunks = [];
+      const reader = ds.readable.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const total = chunks.reduce((s, c) => s + c.length, 0);
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      return new TextDecoder().decode(out);
+    }
+
+    /** Insert chunks into a PNG ArrayBuffer just before IEND */
+    function insertPNGChunks(pngBuf, chunks) {
+      const src = new Uint8Array(pngBuf);
+      // Find IEND: scan backwards for 'IEND' type (0x49454E44)
+      let iendPos = -1;
+      for (let i = src.length - 12; i >= 8; i--) {
+        if (src[i + 4] === 0x49 && src[i + 5] === 0x45 && src[i + 6] === 0x4E && src[i + 7] === 0x44) {
+          iendPos = i;
+          break;
+        }
+      }
+      if (iendPos < 0) throw new Error('PNG IEND not found');
+      const before = src.slice(0, iendPos);
+      const iend = src.slice(iendPos);
+      const totalExtra = chunks.reduce((s, c) => s + c.length, 0);
+      const out = new Uint8Array(before.length + totalExtra + iend.length);
+      out.set(before, 0);
+      let off = before.length;
+      for (const c of chunks) { out.set(c, off); off += c.length; }
+      out.set(iend, off);
+      return out.buffer;
+    }
+
+    /** Read PNG chunks, returning an array of { type, data } */
+    function readPNGChunks(pngBuf) {
+      const src = new Uint8Array(pngBuf);
+      const results = [];
+      let pos = 8; // skip PNG signature
+      while (pos < src.length) {
+        const dv = new DataView(src.buffer, src.byteOffset + pos, 8);
+        const len = dv.getUint32(0);
+        const type = String.fromCharCode(src[pos + 4], src[pos + 5], src[pos + 6], src[pos + 7]);
+        const data = src.slice(pos + 8, pos + 8 + len);
+        results.push({ type, data });
+        pos += 12 + len; // length(4) + type(4) + data(len) + crc(4)
+        if (type === 'IEND') break;
+      }
+      return results;
+    }
+
+    /** Check if an ArrayBuffer is a PNG with PathAnnotate metadata */
+    function hasPathAnnotateMeta(pngBuf) {
+      const src = new Uint8Array(pngBuf);
+      // Check PNG signature
+      if (src[0] !== 0x89 || src[1] !== 0x50 || src[2] !== 0x4E || src[3] !== 0x47) return false;
+      // Quick scan for 'tEXt' chunks with 'PathAnnotate' keyword
+      const chunks = readPNGChunks(pngBuf);
+      return chunks.some(c => {
+        if (c.type !== 'tEXt') return false;
+        const nullIdx = c.data.indexOf(0);
+        if (nullIdx < 0) return false;
+        const kw = new TextDecoder().decode(c.data.slice(0, nullIdx));
+        return kw === 'PathAnnotate';
+      });
+    }
+
+    /** Extract PathAnnotate metadata from a PNG ArrayBuffer. Returns parsed payload or null. */
+    async function extractPathAnnotateMeta(pngBuf) {
+      try {
+        const chunks = readPNGChunks(pngBuf);
+        for (const c of chunks) {
+          if (c.type !== 'zTXt') continue;
+          const nullIdx = c.data.indexOf(0);
+          if (nullIdx < 0) continue;
+          const kw = new TextDecoder().decode(c.data.slice(0, nullIdx));
+          if (kw !== 'PathAnnotateData') continue;
+          // byte after null is compression method (0 = deflate), then compressed data
+          const compressed = c.data.slice(nullIdx + 2);
+          const json = await inflateData(compressed);
+          return JSON.parse(json);
+        }
+      } catch (e) { console.warn('Failed to extract PathAnnotate metadata:', e); }
+      return null;
+    }
+
+    /** Render the original image as a JPEG dataURL for embedding (preserves full resolution) */
+    function renderOriginalAsJPEG(quality) {
+      return new Promise((resolve) => {
+        if (!imgDataURL) { resolve(null); return; }
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.width; c.height = img.height;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          resolve(c.toDataURL('image/jpeg', quality || 0.85));
+        };
+        img.onerror = () => resolve(null);
+        img.src = imgDataURL;
+      });
+    }
+
+    /** Convert a dataURL to an ArrayBuffer */
+    function dataURLToArrayBuffer(dataURL) {
+      const binary = atob(dataURL.split(',')[1]);
+      const buf = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+      return buf.buffer;
     }
 
     // ═══════════════════════════════════════════════════════
-    //  EXPORT — full-resolution JPEG
+    //  EXPORT — PNG with embedded metadata
     // ═══════════════════════════════════════════════════════
     /*
-      The blur issue is caused by exporting at the displayed (scaled-down) canvas
-      resolution. Fix: export at the ORIGINAL image resolution using a multiplier.
+      Exports the annotated canvas as a PNG. Two custom chunks are embedded
+      before IEND:
+        1. tEXt "PathAnnotate" = "1"  — lightweight marker for detection
+        2. zTXt "PathAnnotateData"    — deflate-compressed JSON payload with
+           the session data and the original image (JPEG-compressed, full
+           resolution), allowing PathAnnotate to restore an editable session.
+
+      Rendering strategy: Fabric.js v7's toCanvasElement forcibly disables
+      retina scaling on its offscreen canvas (line 1159 of StaticCanvas.mjs),
+      so text rendered there lacks the browser's DPR-aware font hinting and
+      subpixel anti-aliasing — making annotations look fuzzy compared to the
+      on-screen rendering.
+
+      Fix: composite approach —
+        1. Draw the full-resolution original image on an offscreen canvas
+        2. Capture ONLY the annotation layer from the on-screen canvas at
+           retina quality (the actual browser-rendered pixels)
+        3. Scale and draw the annotation layer on top of the full-res image
+      This gives full-resolution background with screen-quality annotations.
     */
-    function exportImg() {
+    async function exportImg() {
       if (!cv) return;
       cv.discardActiveObject(); cv.renderAll();
 
-      // Determine original image dimensions from the stored dataURL
       const img = new Image();
-      img.onload = () => {
-        const scaleX = img.width / cv.width;
-        const scaleY = img.height / cv.height;
-        const mult = Math.max(scaleX, scaleY, 1); // at minimum 1×
-        const dataURL = cv.toDataURL({ format: 'jpeg', quality: 0.96, multiplier: mult });
-        const title = getTitleText();
-        const fname = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.jpg';
-        const a = document.createElement('a');
-        a.href = dataURL; a.download = fname; a.click();
+      img.onload = async () => {
+        try {
+          // 1. Save current canvas state and ensure 100% zoom
+          const savedZoom = cv.getZoom();
+          const savedW = cv.getWidth();
+          const savedH = cv.getHeight();
+          cv.setZoom(1);
+          cv.setDimensions({ width: baseW, height: baseH });
+
+          // 2. Hide background image, render annotations on transparent background
+          const bgObj = cv.getObjects().find(o => o._bg);
+          if (bgObj) bgObj.set('opacity', 0);
+          cv.renderAll();
+
+          // 3. Capture the on-screen annotation layer at retina quality
+          //    lowerCanvasEl is the actual browser-rendered HTMLCanvasElement,
+          //    which includes DPR-aware font hinting and subpixel anti-aliasing.
+          const screenCanvas = cv.lowerCanvasEl;
+          const annotW = screenCanvas.width;   // retina-scaled
+          const annotH = screenCanvas.height;  // retina-scaled
+
+          // 4. Copy annotation pixels to a temporary canvas (screen render disappears on restore)
+          const annotCanvas = document.createElement('canvas');
+          annotCanvas.width = annotW;
+          annotCanvas.height = annotH;
+          annotCanvas.getContext('2d').drawImage(screenCanvas, 0, 0);
+
+          // 5. Restore background and canvas state
+          if (bgObj) bgObj.set('opacity', 1);
+          cv.setZoom(savedZoom);
+          cv.setDimensions({ width: savedW, height: savedH });
+          cv.renderAll();
+
+          // 6. Composite: full-res original + retina annotation layer
+          const outCanvas = document.createElement('canvas');
+          outCanvas.width = img.width;
+          outCanvas.height = img.height;
+          const ctx = outCanvas.getContext('2d');
+
+          // Draw full-resolution original image
+          ctx.drawImage(img, 0, 0, img.width, img.height);
+
+          // Scale annotation layer to cover full image
+          ctx.drawImage(annotCanvas, 0, 0, img.width, img.height);
+
+          const flatDataURL = outCanvas.toDataURL('image/png');
+          let pngBuf = dataURLToArrayBuffer(flatDataURL);
+
+          // 7. Build metadata payload — original image as JPEG to keep size down
+          const originalImage = await renderOriginalAsJPEG(0.85);
+          const title = getTitleText();
+          const session = {
+            v: 5, imageName: document.getElementById('file-name').textContent,
+            canvasJSON: getCanvasJSON(),
+            canvasWidth: baseW, canvasHeight: baseH,
+            meta: snapMeta(), lbl: getLbl(), annId,
+            titleText: title || null,
+            caseNumber: caseNum, specimen: specimenText,
+          };
+          const payload = { v: 1, session, originalImage };
+          const payloadJSON = JSON.stringify(payload);
+
+          // 8. Compress and build chunks
+          const compressed = await deflateText(payloadJSON);
+          const markerChunk = makePNGChunk('tEXt', makeTEXtData('PathAnnotate', '1'));
+          const dataChunk = makePNGChunk('zTXt', makeZTXtData('PathAnnotateData', compressed));
+
+          // 9. Insert chunks and download
+          pngBuf = insertPNGChunks(pngBuf, [markerChunk, dataChunk]);
+          const blob = new Blob([pngBuf], { type: 'image/png' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.png';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch (e) {
+          console.error('Export failed:', e);
+          alert('Export failed. See console for details.');
+        }
       };
       img.src = imgDataURL || '';
     }
