@@ -2569,15 +2569,29 @@
     });
 
     function readImg(file) {
-      // First, read as ArrayBuffer to check for PathAnnotate PNG metadata
+      // First, read as ArrayBuffer to check for PathAnnotate metadata (JPEG or legacy PNG)
       const abReader = new FileReader();
       abReader.onload = async (ev) => {
         const buf = ev.target.result;
         const src = new Uint8Array(buf);
         const isPNG = src.length > 8 && src[0] === 0x89 && src[1] === 0x50 && src[2] === 0x4E && src[3] === 0x47;
+        const isJPEG = src.length > 2 && src[0] === 0xFF && src[1] === 0xD8;
 
+        // Check for PathAnnotate JPEG metadata (current format)
+        if (isJPEG && hasPathAnnotateJPEGMeta(buf)) {
+          const payload = await extractPathAnnotateJPEGMeta(buf);
+          if (payload && payload.session) {
+            if (payload.originalImage) {
+              imgDataURL = payload.originalImage;
+              savePhotoToIDB(imgDataURL);
+            }
+            applySessionObject(payload.session);
+            return;
+          }
+        }
+
+        // Check for PathAnnotate PNG metadata (legacy format — backward compat)
         if (isPNG && hasPathAnnotateMeta(buf)) {
-          // Extract metadata and restore editable session
           const payload = await extractPathAnnotateMeta(buf);
           if (payload && payload.session) {
             if (payload.originalImage) {
@@ -5302,28 +5316,156 @@
     }
 
     // ═══════════════════════════════════════════════════════
-    //  EXPORT — PNG with embedded metadata
+    //  JPEG APP MARKER METADATA UTILITIES
     // ═══════════════════════════════════════════════════════
     /*
-      Exports the annotated canvas as a PNG. Two custom chunks are embedded
-      before IEND:
-        1. tEXt "PathAnnotate" = "1"  — lightweight marker for detection
-        2. zTXt "PathAnnotateData"    — deflate-compressed JSON payload with
-           the session data and the original image (JPEG-compressed, full
-           resolution), allowing PathAnnotate to restore an editable session.
+      JPEG files use APP segments (FF E0–FF EF) for metadata.  We embed
+      PathAnnotate session data in APP2 (FF E2) segments.  Each segment
+      can hold up to 65,533 bytes of data.  For payloads larger than that
+      we split across multiple APP2 segments with a sequence header:
 
-      Rendering strategy: Fabric.js v7's toCanvasElement forcibly disables
-      retina scaling on its offscreen canvas (line 1159 of StaticCanvas.mjs),
-      so text rendered there lacks the browser's DPR-aware font hinting and
-      subpixel anti-aliasing — making annotations look fuzzy compared to the
-      on-screen rendering.
+        FF E2              — APP2 marker
+        XX XX              — segment length (2 bytes, big-endian, includes itself)
+        "PathAnnotate\0"   — 13-byte identifier
+        XX XX              — chunk index  (2 bytes, big-endian)
+        XX XX              — total chunks (2 bytes, big-endian)
+        [data...]          — payload fragment
 
-      Fix: composite approach —
-        1. Draw the full-resolution original image on an offscreen canvas
-        2. Capture ONLY the annotation layer from the on-screen canvas at
-           retina quality (the actual browser-rendered pixels)
-        3. Scale and draw the annotation layer on top of the full-res image
-      This gives full-resolution background with screen-quality annotations.
+      On re-import we scan for these segments, reassemble the fragments
+      in order, decompress with inflateData(), and parse the JSON payload.
+    */
+
+    const JPEG_APP2_MARKER = 0xFFE2;
+    const JPEG_META_ID = 'PathAnnotate\0';                    // 13 bytes
+    const JPEG_META_ID_BYTES = new TextEncoder().encode(JPEG_META_ID);
+    const JPEG_SEG_OVERHEAD = 2 + JPEG_META_ID_BYTES.length + 4; // length(2) + id(13) + idx(2) + total(2)
+    const JPEG_MAX_SEG_DATA = 65533 - JPEG_META_ID_BYTES.length - 4; // ~65,516 bytes per chunk
+
+    /** Insert compressed metadata into a JPEG ArrayBuffer as APP2 segments. */
+    function insertJPEGAppSegments(jpegBuf, compressedPayload) {
+      const src = new Uint8Array(jpegBuf);
+      // Verify JPEG SOI marker
+      if (src[0] !== 0xFF || src[1] !== 0xD8) throw new Error('Not a valid JPEG');
+
+      // Chunk the payload
+      const totalChunks = Math.ceil(compressedPayload.length / JPEG_MAX_SEG_DATA);
+      const segments = [];
+      for (let i = 0; i < totalChunks; i++) {
+        const offset = i * JPEG_MAX_SEG_DATA;
+        const chunk = compressedPayload.slice(offset, offset + JPEG_MAX_SEG_DATA);
+        const segLen = 2 + JPEG_META_ID_BYTES.length + 4 + chunk.length; // length field includes itself
+        const seg = new Uint8Array(2 + segLen); // marker(2) + segLen bytes
+        seg[0] = 0xFF; seg[1] = 0xE2;          // APP2 marker
+        seg[2] = (segLen >> 8) & 0xFF;          // length high byte
+        seg[3] = segLen & 0xFF;                 // length low byte
+        seg.set(JPEG_META_ID_BYTES, 4);         // identifier
+        const hdrOff = 4 + JPEG_META_ID_BYTES.length;
+        seg[hdrOff]     = (i >> 8) & 0xFF;      // chunk index high
+        seg[hdrOff + 1] = i & 0xFF;             // chunk index low
+        seg[hdrOff + 2] = (totalChunks >> 8) & 0xFF; // total high
+        seg[hdrOff + 3] = totalChunks & 0xFF;   // total low
+        seg.set(chunk, hdrOff + 4);
+        segments.push(seg);
+      }
+
+      // Insert all APP2 segments right after SOI (FF D8), before existing markers
+      const totalInsert = segments.reduce((s, seg) => s + seg.length, 0);
+      const out = new Uint8Array(src.length + totalInsert);
+      out[0] = 0xFF; out[1] = 0xD8;            // SOI
+      let pos = 2;
+      for (const seg of segments) { out.set(seg, pos); pos += seg.length; }
+      out.set(src.subarray(2), pos);            // rest of original JPEG
+      return out.buffer;
+    }
+
+    /** Quick check: does this JPEG buffer contain PathAnnotate APP2 metadata? */
+    function hasPathAnnotateJPEGMeta(jpegBuf) {
+      const src = new Uint8Array(jpegBuf);
+      if (src.length < 4 || src[0] !== 0xFF || src[1] !== 0xD8) return false;
+      let pos = 2;
+      while (pos + 4 < src.length) {
+        if (src[pos] !== 0xFF) break;
+        const marker = src[pos + 1];
+        if (marker === 0xDA) break;             // SOS — no more metadata segments
+        const segLen = (src[pos + 2] << 8) | src[pos + 3];
+        if (marker === 0xE2 && segLen >= JPEG_META_ID_BYTES.length + 2) {
+          // Check identifier
+          let match = true;
+          for (let i = 0; i < JPEG_META_ID_BYTES.length; i++) {
+            if (src[pos + 4 + i] !== JPEG_META_ID_BYTES[i]) { match = false; break; }
+          }
+          if (match) return true;
+        }
+        pos += 2 + segLen;
+      }
+      return false;
+    }
+
+    /** Extract and reassemble PathAnnotate metadata from JPEG APP2 segments. */
+    async function extractPathAnnotateJPEGMeta(jpegBuf) {
+      try {
+        const src = new Uint8Array(jpegBuf);
+        if (src[0] !== 0xFF || src[1] !== 0xD8) return null;
+
+        const chunks = [];    // { index, data }
+        let totalExpected = 0;
+        let pos = 2;
+
+        while (pos + 4 < src.length) {
+          if (src[pos] !== 0xFF) break;
+          const marker = src[pos + 1];
+          if (marker === 0xDA) break;           // SOS
+          const segLen = (src[pos + 2] << 8) | src[pos + 3];
+
+          if (marker === 0xE2 && segLen >= JPEG_META_ID_BYTES.length + 2 + 4) {
+            let match = true;
+            for (let i = 0; i < JPEG_META_ID_BYTES.length; i++) {
+              if (src[pos + 4 + i] !== JPEG_META_ID_BYTES[i]) { match = false; break; }
+            }
+            if (match) {
+              const hdrOff = pos + 4 + JPEG_META_ID_BYTES.length;
+              const idx = (src[hdrOff] << 8) | src[hdrOff + 1];
+              const tot = (src[hdrOff + 2] << 8) | src[hdrOff + 3];
+              totalExpected = tot;
+              const dataStart = hdrOff + 4;
+              const dataEnd = pos + 2 + segLen;
+              chunks.push({ index: idx, data: src.slice(dataStart, dataEnd) });
+            }
+          }
+          pos += 2 + segLen;
+        }
+
+        if (chunks.length === 0 || chunks.length !== totalExpected) return null;
+
+        // Reassemble in order
+        chunks.sort((a, b) => a.index - b.index);
+        const totalLen = chunks.reduce((s, c) => s + c.data.length, 0);
+        const assembled = new Uint8Array(totalLen);
+        let off = 0;
+        for (const c of chunks) { assembled.set(c.data, off); off += c.data.length; }
+
+        const json = await inflateData(assembled);
+        return JSON.parse(json);
+      } catch (e) {
+        console.warn('Failed to extract PathAnnotate JPEG metadata:', e);
+        return null;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  EXPORT — JPEG with embedded metadata
+    // ═══════════════════════════════════════════════════════
+    /*
+      Exports the annotated canvas as a JPEG with embedded session metadata.
+
+      Rendering strategy: scale the Fabric.js canvas to the full original
+      image resolution so annotations (text, lines, shapes) are rendered
+      natively at that size by the browser — giving crisp text with proper
+      font hinting.  The annotation layer is then composited over the
+      full-resolution original image and exported as JPEG.
+
+      Session data (canvas JSON, original image as JPEG) is embedded in
+      custom APP2 segments so the file can be re-opened for further editing.
     */
     async function exportImg() {
       if (!cv) return;
@@ -5332,29 +5474,29 @@
       const img = new Image();
       img.onload = async () => {
         try {
-          // 1. Save current canvas state and ensure 100% zoom
+          // 1. Save current canvas state
           const savedZoom = cv.getZoom();
           const savedW = cv.getWidth();
           const savedH = cv.getHeight();
-          cv.setZoom(1);
-          cv.setDimensions({ width: baseW, height: baseH });
 
-          // 2. Hide background image, render annotations on transparent background
+          // 2. Scale canvas to full original image resolution for crisp annotations
+          const scaleFactor = img.width / baseW;
+          cv.setZoom(scaleFactor);
+          cv.setDimensions({ width: img.width, height: img.height });
+
+          // 3. Hide background image, render annotations on transparent background
           const bgObj = cv.getObjects().find(o => o._bg);
           if (bgObj) bgObj.set('opacity', 0);
           cv.renderAll();
 
-          // 3. Capture the on-screen annotation layer at retina quality
-          //    lowerCanvasEl is the actual browser-rendered HTMLCanvasElement,
-          //    which includes DPR-aware font hinting and subpixel anti-aliasing.
+          // 4. Capture the annotation layer at full output resolution
+          //    lowerCanvasEl now matches the original image dimensions,
+          //    so text is rendered natively at full resolution with proper
+          //    font hinting — no upscaling needed.
           const screenCanvas = cv.lowerCanvasEl;
-          const annotW = screenCanvas.width;   // retina-scaled
-          const annotH = screenCanvas.height;  // retina-scaled
-
-          // 4. Copy annotation pixels to a temporary canvas (screen render disappears on restore)
           const annotCanvas = document.createElement('canvas');
-          annotCanvas.width = annotW;
-          annotCanvas.height = annotH;
+          annotCanvas.width = screenCanvas.width;
+          annotCanvas.height = screenCanvas.height;
           annotCanvas.getContext('2d').drawImage(screenCanvas, 0, 0);
 
           // 5. Restore background and canvas state
@@ -5363,22 +5505,21 @@
           cv.setDimensions({ width: savedW, height: savedH });
           cv.renderAll();
 
-          // 6. Composite: full-res original + retina annotation layer
+          // 6. Composite: full-res original + full-res annotation layer
           const outCanvas = document.createElement('canvas');
           outCanvas.width = img.width;
           outCanvas.height = img.height;
           const ctx = outCanvas.getContext('2d');
-
-          // Draw full-resolution original image
           ctx.drawImage(img, 0, 0, img.width, img.height);
-
-          // Scale annotation layer to cover full image
           ctx.drawImage(annotCanvas, 0, 0, img.width, img.height);
 
-          const flatDataURL = outCanvas.toDataURL('image/png');
-          let pngBuf = dataURLToArrayBuffer(flatDataURL);
+          // 7. Export as JPEG (vastly smaller than PNG for photographic content)
+          const jpegBlob = await new Promise(resolve =>
+            outCanvas.toBlob(resolve, 'image/jpeg', 0.92)
+          );
+          let jpegBuf = await jpegBlob.arrayBuffer();
 
-          // 7. Build metadata payload — original image as JPEG to keep size down
+          // 8. Build metadata payload — original image as JPEG to keep size down
           const originalImage = await renderOriginalAsJPEG(0.85);
           const title = getTitleText();
           const session = {
@@ -5392,17 +5533,15 @@
           const payload = { v: 1, session, originalImage };
           const payloadJSON = JSON.stringify(payload);
 
-          // 8. Compress and build chunks
+          // 9. Compress and embed as JPEG APP2 segments
           const compressed = await deflateText(payloadJSON);
-          const markerChunk = makePNGChunk('tEXt', makeTEXtData('PathAnnotate', '1'));
-          const dataChunk = makePNGChunk('zTXt', makeZTXtData('PathAnnotateData', compressed));
+          jpegBuf = insertJPEGAppSegments(jpegBuf, compressed);
 
-          // 9. Insert chunks and download
-          pngBuf = insertPNGChunks(pngBuf, [markerChunk, dataChunk]);
-          const blob = new Blob([pngBuf], { type: 'image/png' });
+          // 10. Download
+          const blob = new Blob([jpegBuf], { type: 'image/jpeg' });
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
-          a.download = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.png';
+          a.download = (title ? title.replace(/[^a-z0-9_\-. ]/gi, '_') : 'annotated_specimen') + '.jpg';
           a.click();
           URL.revokeObjectURL(a.href);
         } catch (e) {
