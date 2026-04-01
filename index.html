@@ -1464,6 +1464,91 @@
     #file-input {
       display: none
     }
+
+    /* ── RESPONSIVE — MOBILE ────────────────────────── */
+
+    /* Narrow viewports: condense header, simplify bottom bar */
+    @media (max-width: 768px) {
+      /* Header: reduce padding/gap, allow wrapping */
+      header { padding: 0 6px; height: auto; min-height: 36px; flex-wrap: wrap; gap: 4px; padding-top: 4px; padding-bottom: 4px }
+      .hdr-r { gap: 4px; flex-wrap: wrap; justify-content: flex-end }
+
+      /* Pill buttons: icon-only on narrow screens */
+      .pill-label { display: none }
+      .pill { padding: 4px 6px }
+
+      /* Hide logo version tag, filename, separators */
+      .logo-ver { display: none }
+      .hdr-info { display: none }
+      .hdr-sep { display: none }
+
+      /* Sidebar: narrower, single-column tools */
+      .sidebar { width: 160px; padding: 6px 5px }
+      .tool-grid { grid-template-columns: 1fr; gap: 4px }
+
+      /* Bottom bar: only show zoom controls */
+      .desktop-only { display: none !important }
+      .bottom-bar { justify-content: center; gap: 5px; padding: 0 6px; flex-wrap: nowrap; overflow: hidden }
+      .bottom-bar input[type=range] { width: 60px }
+
+      /* Canvas area: less padding */
+      .canvas-area { padding: 8px }
+    }
+
+    /* Very narrow (phone portrait): sidebar becomes horizontal toolbar */
+    @media (max-width: 540px) {
+      .main { flex-direction: column }
+      .sidebar {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: stretch;
+        gap: 3px;
+        padding: 4px 6px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        overflow-y: visible;
+        overflow-x: auto;
+        max-height: none
+      }
+      /* Undo/redo row stays as-is (horizontal pair) */
+      .sidebar .undo-redo-row { width: auto; margin-bottom: 0 }
+      /* Tool grid: horizontal row of compact buttons */
+      .sidebar .tool-grid { display: flex; gap: 3px; grid-template-columns: none }
+      .sidebar .tool-grid .btn { width: auto; min-width: 0; padding: 4px 6px; font-size: 10px }
+      .sidebar .tool-grid .btn .kbdtag { display: none }
+      /* Select button inline too */
+      .sidebar #tool-select { width: auto; padding: 4px 6px; font-size: 10px }
+      .sidebar #tool-select .kbdtag { display: none }
+      /* Hide annotation list, block key, style controls on portrait phone */
+      .sidebar .annot-list,
+      .sidebar .key-list,
+      .sidebar .key-row,
+      .sidebar .divider,
+      .sidebar .sidebar-section,
+      .sidebar .color-row,
+      .sidebar .slabel { display: none }
+      .canvas-area { padding: 4px }
+
+      /* Bottom bar: extra compact */
+      .bottom-bar { height: auto; min-height: 22px; gap: 4px }
+      .bottom-bar input[type=range] { width: 50px }
+      .zoom-pct { min-width: 28px; font-size: 9px }
+      .zoom-fit-btn { padding: 1px 3px; font-size: 8px }
+    }
+
+    /* Landscape phone: give maximum canvas space */
+    @media (max-height: 500px) and (max-width: 900px) {
+      header { min-height: 30px; padding-top: 2px; padding-bottom: 2px }
+      .pill { padding: 2px 5px; font-size: 9px }
+      .bottom-bar { height: 22px }
+      .sidebar { width: 140px; padding: 4px }
+      .tool-grid { grid-template-columns: 1fr; gap: 3px }
+      .sidebar .annot-list,
+      .sidebar .key-list,
+      .sidebar .key-row,
+      .sidebar .divider { display: none }
+    }
   </style>
 </head>
 
@@ -1484,21 +1569,14 @@
   <header>
     <div id="logo-version-header" style="cursor: pointer;" onclick="document.getElementById('changelog-modal').classList.add('open')"><div class="logo">Path<span>Annotate</span><span class="logo-ver" id="logo-ver"></span></div></div>
     <div class="hdr-r">
-      <button class="pill" onclick="document.getElementById('file-input').click()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-        Import Photo
-      </button>
+     
       <button class="pill" onclick="openTitle()" title="Set case number and specimen name">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="4 7 4 4 20 4 20 7" />
           <line x1="9" y1="20" x2="15" y2="20" />
           <line x1="12" y1="4" x2="12" y2="20" />
           </svg>
-        Set Title
+        <span class="pill-label">Title</span>
       </button>
       <button class="pill" onclick="openLegend()" title="Insert an orientation legend onto the canvas">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1507,7 +1585,17 @@
           <polyline points="12 4 10 6 14 6 12 4" /> <!-- arrowhead at top -->
           <!-- horizontal cross line -->
           <line x1="6" y1="13" x2="18" y2="13" /> <!-- horizontal line -->  </svg>
-        Set Legend
+        <span class="pill-label">Legend</span>
+      </button>
+     
+      <div class="hdr-sep"></div>
+      <button class="pill" onclick="document.getElementById('file-input').click()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        <span class="pill-label">Import</span>
       </button>
       <button class="pill" onclick="exportImg()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1515,17 +1603,18 @@
           <polyline points="17 21 17 13 7 13 7 21" />
           <polyline points="7 3 7 8 15 8" />
         </svg>
-        Export Photo
+        <span class="pill-label">Export</span>
       </button>
-      <div class="hdr-sep"></div>
 
       <button class="pill pill-danger" onclick="resetAll()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
         </svg>
-        Reset
+        <span class="pill-label">Reset</span>
       </button>
+      
       <div class="hdr-info" id="file-name">no image loaded</div>
+      <button class="pill" onclick="openInfo()" title="Session Info">&#8505;</button>
       <button class="pill" onclick="toggleTheme()" id="theme-btn">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="5" />
@@ -1537,9 +1626,9 @@
           <line x1="21" y1="12" x2="23" y2="12" />
           <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-        </svg>Light
+        </svg><span class="pill-label">Light</span>
       </button>
-      <button class="pill" onclick="openInfo()" title="Session Info">&#8505;</button>
+      
       <button class="pill" onclick="openIntro()" title="Help / Introduction">?</button>
     </div>
   </header>
@@ -1696,21 +1785,21 @@
   </div>
 
   <div class="bottom-bar">
-    <div class="stat" >Ctrl+Z/Y=Undo/Redo · S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Del=Delete · Space/Mid=Pan · Ctrl+Scroll=Zoom</div>
-    <div class="stat" style="margin-left:auto">Tool: <span id="st-tool">Rectangle</span></div>
-    <div class="stat">Objects: <span id="st-count">0</span></div>
-    <div class="bar-sep"></div>
-    <div class="stat" id="st-dims"></div>
+    <div class="stat desktop-only">S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Space/Mid=Pan · Ctrl+Scroll=Zoom</div>
+    <div class="stat desktop-only" style="margin-left:auto">Tool: <span id="st-tool">Rectangle</span></div>
+    <div class="stat desktop-only">Objects: <span id="st-count">0</span></div>
+    <div class="bar-sep desktop-only"></div>
+    <div class="stat desktop-only" id="st-dims"></div>
+    <button class="zoom-fit-btn" onclick="resetZoom()" title="Fit canvas to window">Reset</button>
     <button class="zoom-btn" onclick="adjustZoom(-25)" title="Zoom out">−</button>
     <input type="range" id="zoom-slider" min="25" max="400" value="100" step="5" oninput="setZoom(+this.value)"
       title="Zoom level">
     <button class="zoom-btn" onclick="adjustZoom(+25)" title="Zoom in">+</button>
     <span class="zoom-pct" id="zoom-pct">100%</span>
-    <button class="zoom-fit-btn" onclick="resetZoom()" title="Fit canvas to window">Reset</button>
-    <div class="bar-sep"></div>
+   
 
-      <button class="privacy-link" onclick="document.getElementById('privacy-modal').classList.add('open')"
-        title="Privacy policy">Privacy Policy</button>
+      <button class="privacy-link desktop-only" onclick="document.getElementById('privacy-modal').classList.add('open')"
+        title="Privacy policy">Privacy</button>
   </div>
 
   <!-- Inline label editor -->
@@ -2123,8 +2212,8 @@
 
     function updateThemeBtn() {
       document.getElementById('theme-btn').innerHTML = dark
-        ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>Light`
-        : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>Dark`;
+        ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><span class="pill-label">Light</span>`
+        : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg><span class="pill-label">Dark</span>`;
     }
     updateThemeBtn();
 
