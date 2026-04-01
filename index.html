@@ -1569,14 +1569,7 @@
   <header>
     <div id="logo-version-header" style="cursor: pointer;" onclick="document.getElementById('changelog-modal').classList.add('open')"><div class="logo">Path<span>Annotate</span><span class="logo-ver" id="logo-ver"></span></div></div>
     <div class="hdr-r">
-      <button class="pill" onclick="document.getElementById('file-input').click()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-        <span class="pill-label">Import</span>
-      </button>
+     
       <button class="pill" onclick="openTitle()" title="Set case number and specimen name">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="4 7 4 4 20 4 20 7" />
@@ -1594,6 +1587,16 @@
           <line x1="6" y1="13" x2="18" y2="13" /> <!-- horizontal line -->  </svg>
         <span class="pill-label">Legend</span>
       </button>
+     
+      <div class="hdr-sep"></div>
+      <button class="pill" onclick="document.getElementById('file-input').click()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        <span class="pill-label">Import</span>
+      </button>
       <button class="pill" onclick="exportImg()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -1602,7 +1605,6 @@
         </svg>
         <span class="pill-label">Export</span>
       </button>
-      <div class="hdr-sep"></div>
 
       <button class="pill pill-danger" onclick="resetAll()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1610,7 +1612,9 @@
         </svg>
         <span class="pill-label">Reset</span>
       </button>
+      
       <div class="hdr-info" id="file-name">no image loaded</div>
+      <button class="pill" onclick="openInfo()" title="Session Info">&#8505;</button>
       <button class="pill" onclick="toggleTheme()" id="theme-btn">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="5" />
@@ -1624,7 +1628,7 @@
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
         </svg><span class="pill-label">Light</span>
       </button>
-      <button class="pill" onclick="openInfo()" title="Session Info">&#8505;</button>
+      
       <button class="pill" onclick="openIntro()" title="Help / Introduction">?</button>
     </div>
   </header>
@@ -1781,21 +1785,21 @@
   </div>
 
   <div class="bottom-bar">
-    <div class="stat desktop-only">Ctrl+Z/Y=Undo/Redo · S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Del=Delete · Space/Mid=Pan · Ctrl+Scroll=Zoom</div>
+    <div class="stat desktop-only">S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Space/Mid=Pan · Ctrl+Scroll=Zoom</div>
     <div class="stat desktop-only" style="margin-left:auto">Tool: <span id="st-tool">Rectangle</span></div>
     <div class="stat desktop-only">Objects: <span id="st-count">0</span></div>
     <div class="bar-sep desktop-only"></div>
     <div class="stat desktop-only" id="st-dims"></div>
+    <button class="zoom-fit-btn" onclick="resetZoom()" title="Fit canvas to window">Reset</button>
     <button class="zoom-btn" onclick="adjustZoom(-25)" title="Zoom out">−</button>
     <input type="range" id="zoom-slider" min="25" max="400" value="100" step="5" oninput="setZoom(+this.value)"
       title="Zoom level">
     <button class="zoom-btn" onclick="adjustZoom(+25)" title="Zoom in">+</button>
     <span class="zoom-pct" id="zoom-pct">100%</span>
-    <button class="zoom-fit-btn" onclick="resetZoom()" title="Fit canvas to window">Reset</button>
-    <div class="bar-sep desktop-only"></div>
+   
 
       <button class="privacy-link desktop-only" onclick="document.getElementById('privacy-modal').classList.add('open')"
-        title="Privacy policy">Privacy Policy</button>
+        title="Privacy policy">Privacy</button>
   </div>
 
   <!-- Inline label editor -->
