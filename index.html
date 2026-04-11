@@ -4553,16 +4553,11 @@
       return annots.filter(a => {
         if (a.noBlock) return false;
         if (a.kind === 'rect' && a.lbl) {
-          return isBlockLabel(a.label);
+          return a.label;
         }
         if (a.kind === 'block') {
           const txt = ((a.shape && a.shape.text) || a.label || '').trim();
-          return isBlockLabel(txt);
-        }
-        // Backwards compatibility: old sessions may have kind='text' with block labels
-        if (a.kind === 'text') {
-          const txt = ((a.shape && a.shape.text) || a.label || '').trim();
-          return isBlockLabel(txt);
+          return txt;
         }
         return false;
       }).sort((a, b) => blockSortKey(a) - blockSortKey(b));
