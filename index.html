@@ -4401,7 +4401,7 @@
       }
       if (a.kind === 'text') {
         const txt = ((a.shape && a.shape.text) || a.label || '').trim();
-        if (isBlockLabel(txt)) return `Block ${txt}`;
+        //if (isBlockLabel(txt)) return `Block ${txt}`;
         return txt.substring(0, 18) || 'Text';
       }
       return a.label || '?';
