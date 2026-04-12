@@ -1785,7 +1785,7 @@
   </div>
 
   <div class="bottom-bar">
-    <div class="stat desktop-only">S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Space/Mid=Pan · Ctrl+Scroll=Zoom</div>
+    <div class="stat desktop-only">S=Select · R=Rect · B=Block · E=Line · T=Text · DblClick=Edit · RClick=Paste · Space=Zoom/Pan</div>
     <div class="stat desktop-only" style="margin-left:auto">Tool: <span id="st-tool">Rectangle</span></div>
     <div class="stat desktop-only">Objects: <span id="st-count">0</span></div>
     <div class="bar-sep desktop-only"></div>
@@ -2046,15 +2046,36 @@
         <div class="intro-page" id="intro-p3">
           <h2>Tools &amp; Shortcuts</h2>
           <table class="intro-kbd-table">
+            <tr>
+              <td><span class="intro-kbd">Ctrl</span> + <span class="intro-kbd">Z</span> / <span class="intro-kbd">Ctrl</span> +
+                <span class="intro-kbd">Y</span></td>
+              <td>Undo / Redo</td>
+            </tr>
+            <tr>
+              <td><span class="intro-kbd">S</span> Select</td>
+              <td>Move, resize, or rotate objects</td>
+            </tr>
+            <tr>
+              <td><span class="intro-kbd">Del</span> Delete</td>
+              <td>Delete selected object</td>
+            </tr>
+
             <tr><td><span class="intro-kbd">R</span> Rectangle</td><td>Draw a block outline</td></tr>
-            <tr><td><span class="intro-kbd">E</span> Line</td><td>Draw a line, double-click the end for an arrow</td></tr>
+            <tr><td><span class="intro-kbd">E</span> Line/Arrow</td><td>Draw a line, double-click end for an arrow</td></tr>
             <tr><td><span class="intro-kbd">B</span> Block label</td><td>Place a floating block letter</td></tr>
             <tr><td><span class="intro-kbd">T</span> Text</td><td>Place free text anywhere</td></tr>
-            <tr><td><span class="intro-kbd">S</span> Select</td><td>Move, resize, or delete objects</td></tr>
+
             <tr><td><span class="intro-kbd">Double-click</span></td><td>Edit label or block text</td></tr>
-            <tr><td><span class="intro-kbd">Del</span></td><td>Delete selected object</td></tr>
-            <tr><td><span class="intro-kbd">Ctrl Z</span> / <span class="intro-kbd">Ctrl Y</span></td><td>Undo / Redo</td></tr>
             <tr><td><span class="intro-kbd">Right-click</span></td><td>Paste last annotation at cursor</td></tr>
+            <tr>
+              <td><span class="intro-kbd">Space</span> + <span class="intro-kbd">Mousewheel</span></td>
+              <td>Hold space with mousewheel to zoom</td>
+            </tr>
+            <tr>
+              <td><span class="intro-kbd">Space</span> + <span class="intro-kbd">Click</span></td>
+              <td>Hold space and click to pan around</td>
+            </tr>
+
           </table>
           <div class="intro-tips">
             <div class="intro-tip">Use the <strong>+</strong> boxes on a selected rectangle or line to duplicate it in the direction of the <strong>+</strong>.</div>
@@ -2886,8 +2907,10 @@
 
       // Ctrl+wheel — zoom toward the pointer position
       area.addEventListener('wheel', e => {
-        if (!cv || !e.ctrlKey) return;
-        e.preventDefault();
+        // allow Ctrl+wheel OR Space+wheel
+        if (!cv || !(e.ctrlKey || spaceHeld)) return;
+        // prevent browser zoom when Ctrl is pressed
+        if (e.ctrlKey) e.preventDefault();
         const wrapper = document.getElementById('canvas-wrapper');
         const rect = area.getBoundingClientRect();
         // Mouse position within the scroll content
@@ -4327,7 +4350,7 @@
         const sources = obj.type === 'activeselection' ? obj.getObjects() : [obj];
         sources.forEach(o => {
           if (o._bg) return;
-          if (o.isTitle) {
+          if (o.isTitle) {//allow deleting title box without text here
             cv.getObjects().filter(t => t.isTitle).forEach(t => cv.remove(t));
           } else {
             const a = annots.find(a => a.shape === o || a.lbl === o);
