@@ -2423,15 +2423,31 @@
     // ═══════════════════════════════════════════════════════
     //  ANCHOR / FREEFORM TOGGLE
     // ═══════════════════════════════════════════════════════
+    // Per-annotation mode with fallback to the global default (used for legacy
+    // sessions whose annots predate the per-ann field).
+    function effAnchorMode(a) {
+      return a && a.anchorMode ? a.anchorMode : anchorMode;
+    }
+
     function syncPopupAnchorBtns() {
+      const current = editAnn ? effAnchorMode(editAnn) : anchorMode;
       const ab = document.getElementById('popup-anchor-btn');
       const fb = document.getElementById('popup-freeform-btn');
-      if (ab) ab.classList.toggle('active', anchorMode === 'anchor');
-      if (fb) fb.classList.toggle('active', anchorMode === 'freeform');
+      if (ab) ab.classList.toggle('active', current === 'anchor');
+      if (fb) fb.classList.toggle('active', current === 'freeform');
     }
 
     function setAnchorMode(mode) {
-      anchorMode = mode;
+      anchorMode = mode;  // global default for future annotations
+      if (editAnn) {
+        editAnn.anchorMode = mode;
+        if (editAnn.kind === 'rect' && editAnn.shape) {
+          glueLbl(editAnn.shape);
+        } else if (editAnn.kind === 'block' && mode === 'anchor') {
+          snapBlockToRect(editAnn);
+        }
+        if (cv) cv.requestRenderAll();
+      }
       syncPopupAnchorBtns();
       saveSettings();
     }
@@ -3046,7 +3062,7 @@
           // the floating letter button), but never removes — toggle is the button's job.
           const rectAnn = rectContaining(p.x, p.y);
           if (rectAnn) {
-            if (!rectAnn.lbl) applyLetterToRect(rectAnn);
+            if (!rectHasLabel(rectAnn)) applyLetterToRect(rectAnn);
             return;
           }
           // Record start point only — the block object is created on the first
@@ -3132,7 +3148,7 @@
             fontFamily: 'DM Mono, monospace',
             fill: color,
             shadow: makeShadow(),
-            padding: 20,
+            padding: 4,  // tight hit-box so clicks on rect stroke near the block reach the rect
             cornerSize: 10,
             selectable: true, evented: true,
             _kind: 'block', _annId: ++annId,
@@ -3140,7 +3156,7 @@
           cv.add(txt);
           addCopyControls(txt);
           cv.setActiveObject(txt);
-          const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '' };
+          const ann = { id: txt._annId, shape: txt, lbl: null, color, label: lbl, kind: 'block', notes: '', anchorMode };
           annots.push(ann);
           autoInc(lbl);
           blockBeingPlaced = txt;
@@ -3210,7 +3226,7 @@
           const txt = blockBeingPlaced;
           blockBeingPlaced = null;
           const ann = annots.find(a => a.shape === txt);
-          if (ann && anchorMode === 'anchor') snapBlockToRect(ann);
+          if (ann && effAnchorMode(ann) === 'anchor') snapBlockToRect(ann);
           addCopyControls(txt);
           refreshList(true); refreshCount(); pushHist();
           return;
@@ -3240,7 +3256,7 @@
         addCopyControls(activeObj);
 
         // Rects start with no letter label — user adds one via the Letter button control.
-        annots.push({ id: activeObj._annId, shape: activeObj, lbl: null, color, label: '', kind: tool, notes: '', noBlock: true });
+        annots.push({ id: activeObj._annId, shape: activeObj, lbl: null, color, label: '', kind: tool, notes: '', noBlock: true, anchorMode, anchor: 'tl' });
 
         // Fabric's internal _onMouseUp cleanup calls discardActiveObject() after this
         // handler returns when canvas.selection=false and the object was selectable:false
@@ -3269,7 +3285,15 @@
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
             // Track as elevated so clips keep it frontmost even after deselect
-            if (obj._kind === 'rect') { lastElevatedRect = obj; updateOverlapClips(); }
+            if (obj._kind === 'rect') {
+              lastElevatedRect = obj;
+              rectLabelShapes(a).forEach(s => objToFront(s));
+              elevateSpecialObjects();
+              // Global setCoords sweep — mirrors setTool('select') and is what
+              // the sidebar-click path relies on to unlock label hit-testing.
+              cv.getObjects().forEach(o => o.setCoords());
+              updateOverlapClips();
+            }
             return; // refreshList already called syncSidebar via re-render
           }
         }
@@ -3290,7 +3314,15 @@
             const el = document.querySelector(`.ann-item[data-id="${a.id}"]`);
             if (el) el.scrollIntoView({ block: 'nearest' });
             // Track as elevated so clips keep it frontmost even after deselect
-            if (obj._kind === 'rect') { lastElevatedRect = obj; updateOverlapClips(); }
+            if (obj._kind === 'rect') {
+              lastElevatedRect = obj;
+              rectLabelShapes(a).forEach(s => objToFront(s));
+              elevateSpecialObjects();
+              // Global setCoords sweep — mirrors setTool('select') and is what
+              // the sidebar-click path relies on to unlock label hit-testing.
+              cv.getObjects().forEach(o => o.setCoords());
+              updateOverlapClips();
+            }
             syncSidebar();
             return;
           }
@@ -3303,6 +3335,10 @@
         if (pendingIncLabel !== null) { autoInc(pendingIncLabel); pendingIncLabel = null; }
         document.querySelectorAll('.ann-item').forEach(i => i.classList.remove('sel'));
         updateToolbarState();
+        // Global setCoords sweep — refreshes hit-detection on all objects so
+        // the next click (e.g. on a moved label) lands correctly. This mirrors
+        // what setTool('select') does in the sidebar-click path.
+        cv.getObjects().forEach(o => o.setCoords());
         // Recompute clips — lastElevatedRect keeps the last-selected rect frontmost
         updateOverlapClips();
       });
@@ -3310,9 +3346,9 @@
       cv.on('object:moving', opt => {
         const obj = opt.target;
         // If moving a label in freeform mode, track its offset from the parent rect center
-        if (obj._kind === 'lbl' && anchorMode === 'freeform') {
+        if (obj._kind === 'lbl') {
           const a = annots.find(a => a.lbl === obj);
-          if (a && a.shape) {
+          if (a && a.shape && effAnchorMode(a) === 'freeform') {
             const center = a.shape.getCenterPoint();
             a._freeOffset = { x: obj.left - center.x, y: obj.top - center.y };
           }
@@ -3322,7 +3358,7 @@
         // clear its rect anchor so it can be dragged freely.
         if (obj._kind === 'block') {
           const a = annots.find(a => a.shape === obj);
-          if (a && anchorMode === 'freeform') {
+          if (a && effAnchorMode(a) === 'freeform') {
             a._anchorRect = null; a._anchorPoint = null;
             a._anchorLine = null; a._lineT = null; a._lineSide = null;
           }
@@ -3357,19 +3393,19 @@
       cv.on('object:modified', opt => {
         const obj = opt.target;
         // When a label is dropped in anchor mode, snap it to the nearest hotpoint
-        if (obj && obj._kind === 'lbl' && anchorMode === 'anchor') {
+        if (obj && obj._kind === 'lbl') {
           const a = annots.find(a => a.lbl === obj);
-          if (a && a.shape) {
-            anchor = nearestHotpoint(obj, a.shape);
+          if (a && a.shape && effAnchorMode(a) === 'anchor') {
+            a.anchor = nearestHotpoint(obj, a.shape);
             glueLbl(a.shape);
           }
         }
 
         // When a block label is dropped in anchor mode, snap it to the nearest
         // hotpoint of any rect it is inside.
-        if (obj && obj._kind === 'block' && anchorMode === 'anchor') {
+        if (obj && obj._kind === 'block') {
           const a = annots.find(a => a.shape === obj);
-          if (a) snapBlockToRect(a);
+          if (a && effAnchorMode(a) === 'anchor') snapBlockToRect(a);
         }
         // Auto-elevate the moved object so it visually sits on top of peers.
         // MUST be deferred: in Fabric v7, bringToFront() calls remove()+add() internally,
@@ -3382,6 +3418,14 @@
           setTimeout(() => {
             if (!cv) return;
             objToFront(obj);
+            // If a rect was moved/modified, keep its labels above it so they
+            // remain the click target on subsequent clicks (Fabric hit-tests
+            // front-to-back; without this, the rect eats clicks meant for
+            // its label).
+            if (obj._kind === 'rect') {
+              const ann = annots.find(a => a.shape === obj);
+              if (ann) rectLabelShapes(ann).forEach(s => objToFront(s));
+            }
             elevateSpecialObjects();
             if (obj._kind === 'rect') updateOverlapClips();
             cv.requestRenderAll();
@@ -3465,7 +3509,7 @@
         // 2. Letter label on rect
         const rectAnn = rectContaining(p.x, p.y);
         if (rectAnn) {
-          if (!rectAnn.lbl) applyLetterToRect(rectAnn);
+          if (!rectHasLabel(rectAnn)) applyLetterToRect(rectAnn);
           return;
         }
 
@@ -3566,6 +3610,27 @@
       };
     }
 
+    // A rect is considered "labelled" if it owns a letter lbl OR has any block
+    // annotation anchored to it. Used to enforce one-label-per-rect.
+    function rectHasLabel(rectAnn, excludeAnn) {
+      if (!rectAnn) return false;
+      if (rectAnn.lbl) return true;
+      return annots.some(a =>
+        a !== excludeAnn && a.kind === 'block' && a._anchorRect === rectAnn.id
+      );
+    }
+
+    // All shape objects that visually "label" a rect — its letter lbl plus any
+    // blocks anchored to it. Used to co-elevate labels with the rect on select.
+    function rectLabelShapes(rectAnn) {
+      const out = [];
+      if (rectAnn.lbl) out.push(rectAnn.lbl);
+      annots.forEach(a => {
+        if (a.kind === 'block' && a._anchorRect === rectAnn.id && a.shape) out.push(a.shape);
+      });
+      return out;
+    }
+
     // Toggle (add or remove) a sequential block label on a rect annotation.
     // Used by both the floating letter button and the block-tool click-inside-rect shortcut.
     function applyLetterToRect(ann) {
@@ -3576,6 +3641,8 @@
         ann.label = '';
         ann.noBlock = true;
       } else {
+        // Refuse to add a letter if an anchored block already labels this rect
+        if (rectHasLabel(ann)) return;
         const lbl = getLbl();
         ann.label = lbl;
         ann.noBlock = false;
@@ -3876,7 +3943,9 @@
     };
 
     function lblPos(shape) {
-      const a = ANCHOR_MAP[anchor] || ANCHOR_MAP.tl;
+      const ann = annots.find(x => x.shape === shape);
+      const key = (ann && ann.anchor) || 'tl';
+      const a = ANCHOR_MAP[key] || ANCHOR_MAP.tl;
       // Use the object's actual center point and rotate offsets into canvas space.
       // This keeps labels correctly anchored even when the rect is rotated.
       const center = shape.getCenterPoint();
@@ -3907,7 +3976,7 @@
         fontSize, fontFamily: 'DM Mono, monospace',
         fill: color,
         shadow: makeShadow(),
-        padding: 12,
+        padding: 2,  // tight hit-box so clicks on rect stroke near the label reach the rect
         selectable: true, evented: true,
         _kind: 'lbl', _annId: shape._annId,
       });
@@ -3917,13 +3986,14 @@
       if (shape._kind !== 'rect') return;
       const a = annots.find(a => a.shape === shape);
       if (!a || !a.lbl) return;
-      if (anchorMode === 'freeform' && a._freeOffset) {
+      if (effAnchorMode(a) === 'freeform' && a._freeOffset) {
         const center = shape.getCenterPoint();
         a.lbl.set({ left: center.x + a._freeOffset.x, top: center.y + a._freeOffset.y });
       } else {
         const p = lblPos(shape);
         a.lbl.set({ left: p.x, top: p.y, originX: p.originX });
       }
+      a.lbl.setCoords();  // refresh aCoords so hit-testing matches new position
       cv.requestRenderAll();
     }
 
@@ -3951,6 +4021,10 @@
       // 1. Dropped inside a rect — use that rect (also handles switching to a new rect)
       let parentRect = rectContaining(cp.x, cp.y);
 
+      // Refuse to anchor to a rect that already has another label (letter lbl
+      // or a different anchored block). Enforces one-label-per-rect.
+      if (parentRect && rectHasLabel(parentRect, ann)) parentRect = null;
+
       // 2. Outside all rects but already anchored to a rect — keep the current anchor rect
       if (!parentRect && ann._anchorRect) {
         parentRect = annots.find(a => a.kind === 'rect' && a.id === ann._anchorRect) || null;
@@ -3961,6 +4035,7 @@
         const hp = nearestHotpoint(obj, parentRect.shape);
         const p  = lblPosForAnchor(parentRect.shape, hp);
         obj.set({ left: p.x, top: p.y, originX: p.originX });
+        obj.setCoords();  // refresh aCoords so hit-testing matches new position
         ann._anchorRect  = parentRect.id;
         ann._anchorPoint = hp;
         // Clear any line anchor so the two systems don't conflict
@@ -3994,13 +4069,14 @@
 
     // Glue anchored block labels to their parent rect (called on rect move/scale/rotate)
     function glueAnchoredBlocks(rectShape) {
-      if (anchorMode !== 'anchor') return;
       const rectAnn = annots.find(a => a.shape === rectShape);
       if (!rectAnn) return;
       annots.forEach(a => {
         if (a.kind !== 'block' || a._anchorRect !== rectAnn.id || !a._anchorPoint) return;
+        if (effAnchorMode(a) !== 'anchor') return;
         const p = lblPosForAnchor(rectShape, a._anchorPoint);
         a.shape.set({ left: p.x, top: p.y, originX: p.originX });
+        a.shape.setCoords();  // refresh aCoords so hit-testing matches new position
       });
     }
 
@@ -4041,6 +4117,7 @@
         originX: 'center',
         originY: 'center',
       });
+      ann.shape.setCoords();  // refresh aCoords so hit-testing matches new position
       ann._anchorLine  = lineAnn.id;
       ann._lineT       = t;
       ann._lineSide    = side;
@@ -4111,11 +4188,11 @@
 
     // Reposition all block labels anchored to a line (called on line move/scale/rotate)
     function glueAnchoredBlocksToLine(lineShape) {
-      if (anchorMode !== 'anchor') return;
       const lineAnn = annots.find(a => a.shape === lineShape);
       if (!lineAnn) return;
       annots.forEach(a => {
         if (a.kind !== 'block' || a._anchorLine !== lineAnn.id) return;
+        if (effAnchorMode(a) !== 'anchor') return;
         positionBlockOnLine(a, lineAnn, a._lineT, a._lineSide);
       });
     }
@@ -4785,6 +4862,8 @@
       return annots.map(a => ({
         id: a.id, color: a.color, label: a.label, kind: a.kind, notes: a.notes || '',
         noBlock:      a.noBlock      || false,
+        anchor:       a.anchor       || null,
+        anchorMode:   a.anchorMode   || null,
         _anchorRect:  a._anchorRect  || null,
         _anchorPoint: a._anchorPoint || null,
         _anchorLine:  a._anchorLine  || null,
@@ -4866,7 +4945,9 @@
             else {
               addCopyControls(obj);
               if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj);
-              if (obj._kind === 'rect') obj.perPixelTargetFind = true;
+              if (obj._kind === 'rect')  obj.perPixelTargetFind = true;
+              if (obj._kind === 'lbl')   obj.padding = 2;
+              if (obj._kind === 'block') obj.padding = 4;
             }
           });
 
@@ -4880,6 +4961,8 @@
             id: m.id, color: m.color, label: m.label, kind: m.kind,
             notes: m.notes || '',
             noBlock:      m.noBlock      || false,
+            anchor:       m.anchor       || 'tl',
+            anchorMode:   m.anchorMode   || null,
             _anchorRect:  m._anchorRect  || null,
             _anchorPoint: m._anchorPoint || null,
             _anchorLine:  m._anchorLine  || null,
@@ -5327,7 +5410,9 @@
               else {
                 addCopyControls(obj);
                 if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj);
-                if (obj._kind === 'rect') obj.perPixelTargetFind = true;
+                if (obj._kind === 'rect')  obj.perPixelTargetFind = true;
+                if (obj._kind === 'lbl')   obj.padding = 2;
+                if (obj._kind === 'block') obj.padding = 4;
               }
             });
             const byId = {}, lblById = {};
