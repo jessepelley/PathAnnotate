@@ -1051,22 +1051,21 @@
 
     .edit-popup .popup-spin:hover { background: var(--accent); color: #fff }
 
-    .popup-anchor-row {
-      display: none
-    }
-
-    .popup-anchor-row.visible {
-      display: flex;
-      gap: 4px
-    }
-
-    .popup-anchor-row .anchor-toggle {
-      flex: 1;
-      display: flex;
+    .edit-popup .popup-lock {
+      background: var(--btn);
+      color: var(--text);
+      padding: 4px 8px;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 4px
+      line-height: 1
     }
+    .edit-popup .popup-lock.active {
+      background: var(--accent-dim);
+      color: var(--accent)
+    }
+    .edit-popup .popup-lock:hover { background: var(--accent); color: #fff }
+    .edit-popup .popup-lock.hidden { display: none }
 
     /* Rainbow swatch — circular, no hover/transform */
     .swatch.swatch-rainbow {
@@ -1243,8 +1242,6 @@
     }
 
     .swap-btn {
-      flex: none;
-      align-self: flex-end;
       padding: 6px 8px;
       border-radius: 6px;
       border: 1px solid var(--accent);
@@ -1822,8 +1819,8 @@
   <div class="edit-popup" id="edit-popup">
     <div class="popup-row">
       <button class="popup-spin" onclick="popupSpinMinus()" title="Shrink range">−</button>
-      <input type="text" id="edit-input" placeholder="Label…">
       <button class="popup-spin" onclick="popupSpinPlus()" title="Extend range">+</button>
+      <input type="text" id="edit-input" placeholder="Label…">
       <button onclick="commitEdit()">✓</button>
     </div>
     <div class="popup-row popup-anchor-row" id="popup-anchor-row">
@@ -1861,12 +1858,19 @@
 
       <div class="mrow" style="align-items:flex-end">
         <div class="mf"><label>Top</label><input id="leg-s" value="Superior" oninput="refreshPreview()"></div>
-        <button class="swap-btn" title="Swap top and bottom" onclick="(function(){const a=document.getElementById('leg-s'),b=document.getElementById('leg-i'),t=a.value;a.value=b.value;b.value=t;refreshPreview();})()">⇄</button>
+        <div class="mf">
+          <button class="swap-btn" title="Swap top and bottom"
+            onclick="(function(){const a=document.getElementById('leg-s'),b=document.getElementById('leg-i'),t=a.value;a.value=b.value;b.value=t;refreshPreview();})()">⇄</button>
+        </div>
+
         <div class="mf"><label>Bottom</label><input id="leg-i" value="Inferior" oninput="refreshPreview()"></div>
       </div>
       <div class="mrow" style="align-items:flex-end">
         <div class="mf"><label>Left</label><input id="leg-l" value="Anterior" oninput="refreshPreview()"></div>
-        <button class="swap-btn" title="Swap left and right" onclick="(function(){const a=document.getElementById('leg-l'),b=document.getElementById('leg-r'),t=a.value;a.value=b.value;b.value=t;refreshPreview();})()">⇄</button>
+        <div class="mf">
+          <button class="swap-btn" title="Swap left and right"
+            onclick="(function(){const a=document.getElementById('leg-l'),b=document.getElementById('leg-r'),t=a.value;a.value=b.value;b.value=t;refreshPreview();})()">⇄</button>
+        </div>
         <div class="mf"><label>Right</label><input id="leg-r" value="Posterior" oninput="refreshPreview()"></div>
       </div>
 
@@ -4857,7 +4861,11 @@
           cv.renderAll();
           cv.getObjects().forEach(obj => {
             if (obj._bg) lockBg(obj);
-            else { addCopyControls(obj); if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj); }
+            else {
+              addCopyControls(obj);
+              if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj);
+              if (obj._kind === 'rect') obj.perPixelTargetFind = true;
+            }
           });
 
           // Rebuild annots with full state including anchor bindings
@@ -5008,6 +5016,8 @@
       if (inf) {
         addLegText(inf, { left: bx + bw / 2, top: ty, originX: 'center' });
       }
+      
+      setTool('select');
 
       cv.renderAll(); pushHist(); closeLegend();
     }
@@ -5222,6 +5232,7 @@
       caseNum      = document.getElementById('case-num-input').value.trim();
       specimenText = document.getElementById('specimen-input').value.trim();
       closeTitle();
+      setTool('select');
 
       // Auto-seed block label based on specimen token type:
       //   numeric token (e.g. "2" from "2 Left Kidney")  → alpha labels: A, B, C…
@@ -5310,7 +5321,11 @@
             cv.renderAll();
             cv.getObjects().forEach(obj => {
               if (obj._bg) lockBg(obj);
-              else { addCopyControls(obj); if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj); }
+              else {
+                addCopyControls(obj);
+                if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj);
+                if (obj._kind === 'rect') obj.perPixelTargetFind = true;
+              }
             });
             const byId = {}, lblById = {};
             cv.getObjects().forEach(obj => {
