@@ -190,8 +190,8 @@
     }
 
     .pill-danger {
-      color: var(--danger);
-      border-color: rgba(224,53,53,.3)
+      border-color: var(--accent);
+      color: var(--accent)
     }
 
     .pill-danger:hover {
@@ -1602,6 +1602,15 @@
       </button>
      
       <div class="hdr-sep"></div>
+
+      <button class="pill pill-danger" onclick="resetAll()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="1 4 1 10 7 10" />
+          <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
+        </svg>
+        <span class="pill-label">New</span>
+      </button>
+
       <button class="pill" onclick="document.getElementById('file-input').click()">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1616,14 +1625,7 @@
           <polyline points="17 21 17 13 7 13 7 21" />
           <polyline points="7 3 7 8 15 8" />
         </svg>
-        <span class="pill-label">Export</span>
-      </button>
-
-      <button class="pill pill-danger" onclick="resetAll()">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
-        </svg>
-        <span class="pill-label">Reset</span>
+        <span class="pill-label">Save</span>
       </button>
       
       <div class="hdr-info" id="file-name">no image loaded</div>
@@ -5175,8 +5177,9 @@
         const req = store.get('current');
         const idbResult = await new Promise(r => { req.onsuccess = () => r(req.result); req.onerror = () => r(null); });
         if (idbResult) {
-          const idbSize = idbResult.size ? Math.round(idbResult.size / 1024) : '?';
-          lines.push('IndexedDB photo: yes (' + idbSize.toLocaleString() + ' KB)');
+          const rawSize = idbResult.size ?? idbResult.length;
+          const idbSize = rawSize ? Math.round(rawSize / 1024) : '?';
+          lines.push('IndexedDB photo: yes (~' + idbSize.toLocaleString() + ' KB)');
         } else {
           lines.push('IndexedDB photo: (empty)');
         }
