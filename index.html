@@ -1242,6 +1242,22 @@
       filter: brightness(1.1)
     }
 
+    .swap-btn {
+      flex: none;
+      align-self: flex-end;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      margin-bottom: 1px
+    }
+    .swap-btn:hover { filter: brightness(1.1) }
+
     .privacy-link {
       color: var(--muted);
       font-family: 'DM Mono', monospace;
@@ -1843,12 +1859,14 @@
         </div>
       </div>
 
-      <div class="mrow">
+      <div class="mrow" style="align-items:flex-end">
         <div class="mf"><label>Top</label><input id="leg-s" value="Superior" oninput="refreshPreview()"></div>
+        <button class="swap-btn" title="Swap top and bottom" onclick="(function(){const a=document.getElementById('leg-s'),b=document.getElementById('leg-i'),t=a.value;a.value=b.value;b.value=t;refreshPreview();})()">⇄</button>
         <div class="mf"><label>Bottom</label><input id="leg-i" value="Inferior" oninput="refreshPreview()"></div>
       </div>
-      <div class="mrow">
+      <div class="mrow" style="align-items:flex-end">
         <div class="mf"><label>Left</label><input id="leg-l" value="Anterior" oninput="refreshPreview()"></div>
+        <button class="swap-btn" title="Swap left and right" onclick="(function(){const a=document.getElementById('leg-l'),b=document.getElementById('leg-r'),t=a.value;a.value=b.value;b.value=t;refreshPreview();})()">⇄</button>
         <div class="mf"><label>Right</label><input id="leg-r" value="Posterior" oninput="refreshPreview()"></div>
       </div>
 
@@ -4839,7 +4857,7 @@
           cv.renderAll();
           cv.getObjects().forEach(obj => {
             if (obj._bg) lockBg(obj);
-            else addCopyControls(obj);
+            else { addCopyControls(obj); if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj); }
           });
 
           // Rebuild annots with full state including anchor bindings
@@ -4957,32 +4975,38 @@
       };
 
       // Background box
-      cv.add(new fabric.Rect({
+      const legBg = new fabric.Rect({
         left: bx, top: by, width: bw, height: bh,
         originX: 'left', originY: 'top',
         fill: 'rgba(0,0,0,0.6)', rx: 5, ry: 5,
         selectable: true, evented: true, isLegend: true,
-      }));
+      });
+      cv.add(legBg); applyCtrlTheme(legBg);
+
+      const addLegText = (str, props) => {
+        const t = new fabric.IText(str, { ...baseProps, ...props });
+        cv.add(t); applyCtrlTheme(t);
+      };
 
       let ty = by + pad;
 
       if (sup) {
-        cv.add(new fabric.IText(sup, { ...baseProps, left: bx + bw / 2, top: ty, originX: 'center' }));
+        addLegText(sup, { left: bx + bw / 2, top: ty, originX: 'center' });
         ty += lh;
       }
 
       if (hasMid) {
         // Left word — left-aligned from box left edge
-        if (left) cv.add(new fabric.IText(left, { ...baseProps, left: bx + pad, top: ty, originX: 'left' }));
+        if (left) addLegText(left, { left: bx + pad, top: ty, originX: 'left' });
         // Plus — always centered in the box
-        cv.add(new fabric.IText('+', { ...baseProps, left: bx + bw / 2, top: ty, originX: 'center' }));
+        addLegText('+', { left: bx + bw / 2, top: ty, originX: 'center' });
         // Right word — right-aligned from box right edge
-        if (right) cv.add(new fabric.IText(right, { ...baseProps, left: bx + bw - pad, top: ty, originX: 'right' }));
+        if (right) addLegText(right, { left: bx + bw - pad, top: ty, originX: 'right' });
         ty += lh;
       }
 
       if (inf) {
-        cv.add(new fabric.IText(inf, { ...baseProps, left: bx + bw / 2, top: ty, originX: 'center' }));
+        addLegText(inf, { left: bx + bw / 2, top: ty, originX: 'center' });
       }
 
       cv.renderAll(); pushHist(); closeLegend();
@@ -5222,12 +5246,13 @@
       const bh = fz + pad * 2;
       const bx = 10, by = 10;
 
-      cv.add(new fabric.Rect({
+      const titleBg = new fabric.Rect({
         left: bx, top: by, width: bw, height: bh,
         originX: 'left', originY: 'top',
         fill: 'rgba(0,0,0,0.65)', rx: 4, ry: 4,
         selectable: true, evented: true, isTitle: true,
-      }));
+      });
+      cv.add(titleBg); applyCtrlTheme(titleBg);
       const itxt = new fabric.IText(text, {
         left: bx + pad, top: by + pad,
         originX: 'left', originY: 'top',
@@ -5236,7 +5261,7 @@
         shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.6)', blur: 3, offsetX: 1, offsetY: 1 }),
         selectable: true, evented: true, isTitle: true,
       });
-      cv.add(itxt);
+      cv.add(itxt); applyCtrlTheme(itxt);
       itxt.on('editing:exited', () => pushHist());
 
       cv.renderAll(); pushHist(); refreshLabelKey();
@@ -5285,7 +5310,7 @@
             cv.renderAll();
             cv.getObjects().forEach(obj => {
               if (obj._bg) lockBg(obj);
-              else addCopyControls(obj);
+              else { addCopyControls(obj); if (obj.isTitle || obj.isLegend) applyCtrlTheme(obj); }
             });
             const byId = {}, lblById = {};
             cv.getObjects().forEach(obj => {
