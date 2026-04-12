@@ -4917,7 +4917,12 @@
 
     function openLegend() { refreshPreview(); document.getElementById('legend-modal').classList.add('open'); }
     function closeLegend() { document.getElementById('legend-modal').classList.remove('open'); }
-    document.getElementById('legend-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeLegend(); });
+    (function() {
+      let mdOnBackdrop = false;
+      const lm = document.getElementById('legend-modal');
+      lm.addEventListener('mousedown', e => { mdOnBackdrop = e.target === lm; });
+      lm.addEventListener('click', e => { if (e.target === lm && mdOnBackdrop) closeLegend(); });
+    })();
 
     function refreshPreview() {
       const s = document.getElementById('leg-s').value;
@@ -5165,18 +5170,19 @@
     }
     function closeTitle() { document.getElementById('title-modal').classList.remove('open'); }
 
-    document.getElementById('title-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeTitle(); });
-    document.getElementById('privacy-modal').addEventListener('click', e => {
-      if (e.target === e.currentTarget) document.getElementById('privacy-modal').classList.remove('open');
-    });
-    document.getElementById('info-modal').addEventListener('click', e => {
-      if (e.target === e.currentTarget) document.getElementById('info-modal').classList.remove('open');
-    });
-    document.getElementById('changelog-modal').addEventListener('click', e => {
-      if (e.target === e.currentTarget) document.getElementById('changelog-modal').classList.remove('open');
-    });
-    document.getElementById('intro-modal').addEventListener('click', e => {
-      if (e.target === e.currentTarget) closeIntro();
+    // Close modals on backdrop click, but only when mousedown also started on the backdrop.
+    // This prevents accidental dismissal when the user pastes text and the mouse drifts outside.
+    [
+      { id: 'title-modal',     close: closeTitle },
+      { id: 'privacy-modal',   close: () => document.getElementById('privacy-modal').classList.remove('open') },
+      { id: 'info-modal',      close: () => document.getElementById('info-modal').classList.remove('open') },
+      { id: 'changelog-modal', close: () => document.getElementById('changelog-modal').classList.remove('open') },
+      { id: 'intro-modal',     close: closeIntro },
+    ].forEach(({ id, close }) => {
+      let mdOnBackdrop = false;
+      const el = document.getElementById(id);
+      el.addEventListener('mousedown', e => { mdOnBackdrop = e.target === el; });
+      el.addEventListener('click',     e => { if (e.target === el && mdOnBackdrop) close(); });
     });
     // Allow Enter to advance from Case Number to Specimen, then Apply
     document.getElementById('case-num-input').addEventListener('keydown', e => {
